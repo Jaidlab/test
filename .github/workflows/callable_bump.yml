@@ -113,6 +113,7 @@ jobs:
           EOF
         env:
           steps: ${{ toJson(steps) }}
+          github: ${{ toJson(github) }}
       - name: getReleaseTexts
         id: getReleaseTexts
         shell: bash
