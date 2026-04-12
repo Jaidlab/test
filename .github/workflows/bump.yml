@@ -13,11 +13,11 @@ on:
           - major
 jobs:
   debug:
-    uses: jaidlab/test/.github/workflows/callable/debug.yml@main
+    uses: jaidlab/test/.github/workflows/callable_debug.yml@main
   job:
     name: ${{ github.workflow }}
     permissions:
       contents: write
-    uses: jaidlab/test/.github/workflows/callable/bump.yml@main
+    uses: jaidlab/test/.github/workflows/callable_bump.yml@main
     with:
       bumpAmount: ${{ inputs.bumpAmount }}
