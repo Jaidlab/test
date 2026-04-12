@@ -109,7 +109,7 @@ jobs:
             newTag: steps.createTag.outputs.new_tag,
           })
           await setOutput('newSemver', newSemver?.version ?? '')
-          await Bun.write(Bun.env.GITHUB_STEP_SUMMARY, `## Bumped to ${steps.createTag.outputs.new_tag}\n\n- New semver: ${newSemver?.version ?? 'N/A'}\n- Old tag: ${steps.createTag.outputs.old_tag || 'N/A'}\n`)
+          await Bun.write(Bun.env.GITHUB_STEP_SUMMARY, `[${steps.createTag.outputs.old_tag}](https://github.com/${process.env.GITHUB_REPOSITORY}/releases/tag/${steps.createTag.outputs.old_tag}) → [${steps.createTag.outputs.new_tag}](https://github.com/${process.env.GITHUB_REPOSITORY}/releases/tag/${steps.createTag.outputs.new_tag})\n\n${github.event.repository.html_url}`)
           EOF
         env:
           steps: ${{ toJson(steps) }}
