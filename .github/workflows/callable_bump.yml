@@ -110,7 +110,7 @@ jobs:
           })
           await setOutput('newSemver', newSemver?.version ?? '')
           const github = parseRequiredJsonEnv<Record<string, unknown>>('github')
-          await Bun.write(Bun.env.GITHUB_STEP_SUMMARY, `[${steps.createTag.outputs.old_tag}](https://github.com/${process.env.GITHUB_REPOSITORY}/releases/tag/${steps.createTag.outputs.old_tag}) → [${steps.createTag.outputs.new_tag}](https://github.com/${process.env.GITHUB_REPOSITORY}/releases/tag/${steps.createTag.outputs.new_tag})\n\n${github.event.repository.html_url}`)
+          await Bun.write(Bun.env.GITHUB_STEP_SUMMARY, `[${steps.createTag.outputs.old_tag}](${github.event.repository.html_url}/releases/tag/${steps.createTag.outputs.old_tag}) → [${steps.createTag.outputs.new_tag}](${github.event.repository.html_url}/releases/tag/${steps.createTag.outputs.new_tag})`)
           EOF
         env:
           steps: ${{ toJson(steps) }}
