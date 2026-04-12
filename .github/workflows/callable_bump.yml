@@ -84,7 +84,7 @@ jobs:
           bun run - <<'EOF'
           import {appendFile} from 'node:fs/promises'
 
-          const parseRequiredJsonEnv = <Output>(name: string) => {
+          function parseRequiredJsonEnv<Output>(name: string) {
             const value = process.env[name]
             if (value == null) {
               throw new Error(`Missing required environment variable “${name}”.`)
@@ -144,7 +144,7 @@ jobs:
           bun run - <<'EOF'
           import {appendFile} from 'node:fs/promises'
 
-          const parseRequiredJsonEnv = <Output>(name: string) => {
+          function parseRequiredJsonEnv<Output>(name: string) {
             const value = process.env[name]
             if (value == null) {
               throw new Error(`Missing required environment variable “${name}”.`)

@@ -63,7 +63,7 @@ jobs:
             [key: string]: unknown
           }
 
-          const parseRequiredJsonEnv = <Output>(name: string) => {
+          function parseRequiredJsonEnv<Output>(name: string) {
             const value = process.env[name]
             if (value == null) {
               throw new Error(`Missing required environment variable “${name}”.`)
@@ -78,7 +78,7 @@ jobs:
             console.log(`Output ${name}: ${rendered}`)
           }
 
-          const runInSandbox = <Output>(code: string, sandbox: Record<string, unknown>, timeout = 60_000) => {
+          function runInSandbox<Output>(code: string, sandbox: Record<string, unknown>, timeout = 60_000) {
             return runInNewContext(code, sandbox, {timeout}) as Output
           }
 

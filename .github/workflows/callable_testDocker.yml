@@ -58,7 +58,7 @@ jobs:
           bun run - <<'EOF'
           import {appendFile} from 'node:fs/promises'
 
-          const parseRequiredJsonEnv = <Output>(name: string) => {
+          function parseRequiredJsonEnv<Output>(name: string) {
             const value = process.env[name]
             if (value == null) {
               throw new Error(`Missing required environment variable “${name}”.`)
@@ -128,7 +128,7 @@ jobs:
             testEval?: string
           }
 
-          const parseRequiredJsonEnv = <Output>(name: string) => {
+          function parseRequiredJsonEnv<Output>(name: string) {
             const value = process.env[name]
             if (value == null) {
               throw new Error(`Missing required environment variable “${name}”.`)
@@ -209,7 +209,7 @@ jobs:
           }
 
           const stripFinalNewline = (value: string) => value.replace(/\r?\n$/, '')
-          const runInSandbox = <Output>(code: string, sandbox: Record<string, unknown>, timeout = 60_000) => {
+          function runInSandbox<Output>(code: string, sandbox: Record<string, unknown>, timeout = 60_000) {
             return runInNewContext(code, sandbox, {timeout}) as Output
           }
 
