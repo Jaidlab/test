@@ -1,0 +1,189 @@
+name: bump
+on:
+  workflow_call:
+    inputs:
+      bumpAmount:
+        type: string
+        required: false
+        default: patch
+        description: Semver segment to bump (→ v[major].[minor].[patch])
+      releaseBranch:
+        type: string
+        required: false
+        default: main
+        description: The branch that will create release tags
+      initialReleaseTitle:
+        type: string
+        required: false
+        default: '[Initial release] {0}/{1} {2}'
+        description: 'Formats: {0} = repoOwner, {1} = repoName, {2} = newTag'
+      releaseTitle:
+        type: string
+        required: false
+        default: '{0}/{1} {3}'
+        description: 'Formats: {0} = repoOwner, {1} = repoName, {2} = oldTag, {3} = newTag'
+      initialReleaseBody:
+        type: string
+        required: false
+        default: '[[{2}](https://github.com/{0}/{1}/tree/{2})'
+        description: '{0} = repoOwner, {1} = repoName, {2} = newTag'
+      releaseBody:
+        type: string
+        required: false
+        default: '[{2}](https://github.com/{0}/{1}/tree/{2}) [→](https://github.com/{0}/{1}/compare/{2}...{3}) [{3}](https://github.com/{0}/{1}/tree/{3})'
+        description: '{0} = repoOwner, {1} = repoName, {2} = oldTag, {3} = newTag'
+      makeLatest:
+        type: string
+        required: false
+        default: true
+    outputs:
+      oldTag:
+        description: Name of the old tag used for relative bumping
+        value: ${{ jobs.job.outputs.oldTag }}
+      newTag:
+        description: Name of the newly created git tag
+        value: ${{ jobs.job.outputs.newTag }}
+      newSemver:
+        description: Semver notation of the newly created git tag
+        value: ${{ jobs.job.outputs.newSemver }}
+      releaseId:
+        description: GitHub API ID of newly created release
+        value: ${{ jobs.job.outputs.releaseId }}
+      releaseUrl:
+        description: HTML link to newly created release
+        value: ${{ jobs.job.outputs.releaseUrl }}
+      releaseTitle:
+        description: Title of the newly created release with string interpolation applied
+        value: ${{ jobs.job.outputs.releaseTitle }}
+      releaseBody:
+        description: Description of the newly created release with string interpolation applied
+        value: ${{ jobs.job.outputs.releaseBody }}
+jobs:
+  job:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+      - name: setupBun
+        uses: oven-sh/setup-bun@v2.2.0
+      - name: createTag
+        id: createTag
+        uses: anothrNick/github-tag-action@1.75.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: true
+          DEFAULT_BUMP: ${{ inputs.bumpAmount }}
+          RELEASE_BRANCHES: ${{ inputs.releaseBranch }}
+      - name: extractSemvers
+        id: extractSemvers
+        run: |-
+          bun run - <<'EOF'
+          import {appendFile} from 'node:fs/promises'
+
+          const parseRequiredJsonEnv = <Output>(name: string) => {
+            const value = process.env[name]
+            if (value == null) {
+              throw new Error(`Missing required environment variable “${name}”.`)
+            }
+            return JSON.parse(value) as Output
+          }
+
+          const setOutput = async (name: string, value: unknown) => {
+            const rendered = String(value)
+            const delimiter = `output_${Math.random().toString(36).slice(2)}`
+            await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
+            console.log(`Output ${name}: ${rendered}`)
+          }
+
+          const steps = parseRequiredJsonEnv<Record<string, {outputs: Record<string, string>}>>('steps')
+          const extractSemver = (tag: string) => {
+            return /(?<versionPrefix>v?)(?<version>\d+\.\d+\.\d+)/.exec(tag)?.groups
+          }
+          const newSemver = extractSemver(steps.createTag.outputs.new_tag)
+          console.dir({
+            newSemver,
+            newTag: steps.createTag.outputs.new_tag,
+          })
+          await setOutput('newSemver', newSemver?.version ?? '')
+          EOF
+        env:
+          steps: ${{ toJson(steps) }}
+      - name: getReleaseTexts
+        id: getReleaseTexts
+        shell: bash
+        env:
+          oldTag: ${{ steps.createTag.outputs.old_tag }}
+          releaseTitle: ${{ format(inputs.releaseTitle, github.repository_owner, github.event.repository.name, steps.createTag.outputs.old_tag, steps.createTag.outputs.new_tag) }}
+          releaseBody: ${{ format(inputs.releaseBody, github.repository_owner, github.event.repository.name, steps.createTag.outputs.old_tag, steps.createTag.outputs.new_tag) }}
+          initialReleaseTitle: ${{ format(inputs.initialReleaseTitle, github.repository_owner, github.event.repository.name, steps.createTag.outputs.new_tag) }}
+          initialReleaseBody: ${{ format(inputs.initialReleaseBody, github.repository_owner, github.event.repository.name, steps.createTag.outputs.new_tag) }}
+        run: |
+          if [[ -n $oldTag ]]; then
+            printf title=%s "$releaseTitle" > $GITHUB_OUTPUT
+            printf '\nbody=%s' "$releaseBody" >> $GITHUB_OUTPUT
+          else
+            printf title=%s "$initialReleaseTitle" > $GITHUB_OUTPUT
+            printf '\nbody=%s' "$initialReleaseBody" >> $GITHUB_OUTPUT
+          fi
+      - name: updateRelease
+        id: updateRelease
+        uses: ncipollo/release-action@v1.21.0
+        with:
+          allowUpdates: true
+          name: ${{ steps.getReleaseTexts.outputs.title }}
+          body: ${{ steps.getReleaseTexts.outputs.body }}
+          tag: ${{ steps.createTag.outputs.new_tag }}
+          makeLatest: ${{ inputs.makeLatest }}
+      - name: prepareDispatch
+        id: prepareDispatch
+        run: |-
+          bun run - <<'EOF'
+          import {appendFile} from 'node:fs/promises'
+
+          const parseRequiredJsonEnv = <Output>(name: string) => {
+            const value = process.env[name]
+            if (value == null) {
+              throw new Error(`Missing required environment variable “${name}”.`)
+            }
+            return JSON.parse(value) as Output
+          }
+
+          const setOutput = async (name: string, value: unknown) => {
+            const rendered = String(value)
+            const delimiter = `output_${Math.random().toString(36).slice(2)}`
+            await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
+            console.log(`Output ${name}: ${rendered}`)
+          }
+
+          const steps = parseRequiredJsonEnv<Record<string, {outputs: Record<string, string>}>>('steps')
+          const output = {
+            newSemver: steps.extractSemvers.outputs.newSemver,
+            newTag: steps.createTag.outputs.new_tag,
+            oldTag: steps.createTag.outputs.old_tag,
+            releaseBody: steps.getReleaseTexts.outputs.body,
+            releaseId: steps.updateRelease.outputs.id,
+            releaseTitle: steps.getReleaseTexts.outputs.title,
+            releaseUrl: steps.updateRelease.outputs.html_url,
+          }
+          await setOutput('value', JSON.stringify(output))
+          EOF
+        env:
+          steps: ${{ toJson(steps) }}
+      - name: triggerDispatch
+        id: triggerDispatch
+        uses: peter-evans/repository-dispatch@v4.0.1
+        with:
+          event-type: bumped
+          client-payload: ${{ steps.prepareDispatch.outputs.value }}
+    outputs:
+      oldTag: ${{ steps.createTag.outputs.old_tag }}
+      newTag: ${{ steps.createTag.outputs.new_tag }}
+      newSemver: ${{ steps.extractSemvers.outputs.newSemver }}
+      releaseId: ${{ steps.updateRelease.outputs.id }}
+      releaseUrl: ${{ steps.updateRelease.outputs.html_url }}
+      releaseTitle: ${{ steps.getReleaseTexts.outputs.title }}
+      releaseBody: ${{ steps.getReleaseTexts.outputs.body }}

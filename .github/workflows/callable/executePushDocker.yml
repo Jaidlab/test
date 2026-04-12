@@ -1,0 +1,214 @@
+name: executePushDocker
+on:
+  workflow_call:
+    inputs:
+      passedInputs:
+        type: string
+        required: true
+        description: JSON object containing all parent inputs
+      matrixEntry:
+        type: string
+        required: true
+        description: JSON object containing all matrix values
+      nameSuffix:
+        type: string
+        required: false
+        description: Suffix to append to job names
+    secrets:
+      dockerHubToken:
+        required: false
+        description: 'Create here with “Read, Write”: https://hub.docker.com/settings/security?generateToken=true'
+    outputs:
+      meta:
+        value: ${{ jobs.push.outputs.meta }}
+      digest:
+        value: ${{ jobs.push.outputs.digest }}
+      imageId:
+        value: ${{ jobs.push.outputs.imageId }}
+      imageName:
+        value: ${{ jobs.push.outputs.imageName }}
+      imageSlug:
+        value: ${{ jobs.push.outputs.imageSlug }}
+      imageUser:
+        value: ${{ jobs.push.outputs.imageUser }}
+run-name: invoke${{ inputs.nameSuffix }}
+jobs:
+  getInputs:
+    name: getInputs${{ inputs.nameSuffix }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      value: ${{ steps.getInputs.outputs.value }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6.0.2
+      - name: setupBun
+        uses: oven-sh/setup-bun@v2.2.0
+      - id: getInputs
+        name: getInputs
+        run: |-
+          bun run - <<'EOF'
+          import {appendFile} from 'node:fs/promises'
+
+          const parseRequiredJsonEnv = <Output>(name: string) => {
+            const value = process.env[name]
+            if (value == null) {
+              throw new Error(`Missing required environment variable “${name}”.`)
+            }
+            return JSON.parse(value) as Output
+          }
+
+          const setOutput = async (name: string, value: unknown) => {
+            const rendered = String(value)
+            const delimiter = `output_${Math.random().toString(36).slice(2)}`
+            await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
+            console.log(`Output ${name}: ${rendered}`)
+          }
+
+          const getRepositoryFields = () => {
+            const repository = process.env.GITHUB_REPOSITORY
+            if (!repository) {
+              throw new Error('Missing required environment variable “GITHUB_REPOSITORY”.')
+            }
+            const [owner, name] = repository.split('/')
+            if (!owner || !name) {
+              throw new Error(`Invalid GITHUB_REPOSITORY value: ${repository}`)
+            }
+            return {
+              name,
+              owner,
+            }
+          }
+
+          const camelCase = (input: string) => {
+            return input
+              .replaceAll(/([a-z\d])([A-Z])/g, '$1 $2')
+              .split(/[^A-Za-z0-9]+/)
+              .filter(part => part.length > 0)
+              .map((part, index) => {
+                const normalized = `${part[0]!.toUpperCase()}${part.slice(1)}`
+                if (index === 0) {
+                  return `${part[0]!.toLowerCase()}${part.slice(1)}`
+                }
+                return normalized
+              })
+              .join('')
+          }
+
+          const preventStart = (value: string, badStart: string) => {
+            if (value.startsWith(badStart)) {
+              return value.slice(badStart.length)
+            }
+            return value
+          }
+
+          const inputs = parseRequiredJsonEnv<Record<string, unknown>>('inputs')
+          const passedInputs = JSON.parse(String(inputs.passedInputs)) as Record<string, unknown>
+          const matrixEntry = JSON.parse(String(inputs.matrixEntry)) as Record<string, unknown>
+          if ((process.env.RUNNER_DEBUG ?? '').trim() === '1') {
+            console.dir({
+              inputs,
+              matrixEntry,
+              passedInputs,
+            }, {depth: null})
+          }
+          console.dir(Object.fromEntries(Object.entries(inputs).filter(([key]) => !['passedInputs', 'matrixEntry'].includes(key))), {depth: null})
+          const outputs: Record<string, unknown> = {
+            ...Object.fromEntries(Object.entries(inputs).filter(([key]) => !['passedInputs', 'matrixEntry'].includes(key))),
+            ...passedInputs,
+          }
+          for (const [key, value] of Object.entries(matrixEntry)) {
+            outputs[camelCase(`matrix ${key}`)] = value
+          }
+          const {name: repositoryName, owner: repositoryOwner} = getRepositoryFields()
+          if (!outputs.imageName) {
+            outputs.imageName = preventStart(repositoryName.toLowerCase(), 'docker-')
+          }
+          if (!outputs.imageUser) {
+            outputs.imageUser = repositoryOwner.toLowerCase()
+          }
+          if (!outputs.imageSlug) {
+            outputs.imageSlug = `${outputs.imageUser}/${outputs.imageName}`
+          }
+          if (!outputs.imageArtifact) {
+            outputs.imageArtifact = `${process.env.GITHUB_RUN_ID}_${outputs.matrixId}`
+          }
+          if (!outputs.imageFolder) {
+            outputs.imageFolder = `/tmp/dockerBuild/${process.env.GITHUB_RUN_ID}_${outputs.matrixId}`
+          }
+          if (!outputs.nameSuffix) {
+            if (outputs.matrixId && outputs.matrixId !== 'default') {
+              outputs.nameSuffix = ` (${outputs.matrixId})`
+            } else {
+              outputs.nameSuffix = ''
+            }
+          }
+          for (const key of Object.keys(outputs).sort((first, second) => first.localeCompare(second))) {
+            await setOutput(key, outputs[key])
+          }
+          await setOutput('value', JSON.stringify(outputs))
+          EOF
+        env:
+          inputs: ${{ toJson(inputs) }}
+  build:
+    name: build${{ fromJson(needs.getInputs.outputs.value).nameSuffix }}
+    needs: getInputs
+    uses: ./.github/workflows/buildDocker.yml
+    with:
+      id: ${{ fromJson(needs.getInputs.outputs.value).matrixId }}
+      arch: ${{ fromJson(needs.getInputs.outputs.value).matrixPlatform }}
+      buildContext: ${{ fromJson(needs.getInputs.outputs.value).buildContext }}
+      buildArgs: ${{ fromJson(needs.getInputs.outputs.value).matrixBuildArgs }}
+      imageName: ${{ fromJson(needs.getInputs.outputs.value).imageName }}
+      nameSuffix: ${{ fromJson(needs.getInputs.outputs.value).nameSuffix }}
+  test:
+    name: test${{ fromJson(needs.getInputs.outputs.value).nameSuffix }}
+    needs:
+      - getInputs
+      - build
+    uses: ./.github/workflows/testDocker.yml
+    with:
+      id: ${{ fromJson(needs.getInputs.outputs.value).matrixId }}
+      dockerRunArgs: ${{ fromJson(needs.getInputs.outputs.value).testDockerRunArgs }}
+      appArgs: ${{ fromJson(needs.getInputs.outputs.value).testAppArgs }}
+      testEval: ${{ fromJson(needs.getInputs.outputs.value).testEval }}
+      imageFolder: ${{ needs.build.outputs.imageFolder }}
+      imageArtifact: ${{ needs.build.outputs.imageArtifact }}
+      imageFile: ${{ needs.build.outputs.imageFile }}
+      imageIdentifier: ${{ needs.build.outputs.imageIdentifier }}
+      nameSuffix: ${{ fromJson(needs.getInputs.outputs.value).nameSuffix }}
+      arch: ${{ fromJson(needs.getInputs.outputs.value).matrixPlatform }}
+  upload:
+    name: upload${{ fromJson(needs.getInputs.outputs.value).nameSuffix }}
+    needs:
+      - getInputs
+      - build
+      - test
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/uploadDocker.yml
+    with:
+      id: ${{ fromJson(needs.getInputs.outputs.value).matrixId }}
+      dockerHubUser: ${{ fromJson(needs.getInputs.outputs.value).dockerHubUser }}
+      dockerHubRegistry: ${{ fromJson(needs.getInputs.outputs.value).dockerHubRegistry }}
+      githubRegistry: ${{ fromJson(needs.getInputs.outputs.value).githubRegistry }}
+      baseTags: ${{ fromJson(needs.getInputs.outputs.value).baseTags }}
+      addShaTags: ${{ fromJson(needs.getInputs.outputs.value).addShaTags }}
+      addScheduleTags: ${{ fromJson(needs.getInputs.outputs.value).addScheduleTags }}
+      addVersionTag: ${{ fromJson(needs.getInputs.outputs.value).addVersionTag }}
+      versionTagPrefix: ${{ fromJson(needs.getInputs.outputs.value).versionTagPrefix }}
+      additionalTags: ${{ fromJson(needs.getInputs.outputs.value).additionalTags }}
+      versionTag: ${{ fromJson(needs.getInputs.outputs.value).versionTag }}
+      versionTagSemverPrefix: ${{ fromJson(needs.getInputs.outputs.value).versionTagSemverPrefix }}
+      flavorLatest: ${{ fromJson(needs.getInputs.outputs.value).flavorLatest }}
+      flavorPrefix: ${{ fromJson(needs.getInputs.outputs.value).flavorPrefix }}
+      flavorSuffix: ${{ fromJson(needs.getInputs.outputs.value).matrixFlavor || fromJson(needs.getInputs.outputs.value).flavorSuffix }}
+      flavorConnectionString: ${{ fromJson(needs.getInputs.outputs.value).flavorConnectionString }}
+      imageSlug: ${{ fromJson(needs.getInputs.outputs.value).imageSlug }}
+      arch: ${{ fromJson(needs.getInputs.outputs.value).matrixPlatform }}
+      buildOutput: ${{ toJson(needs.build.outputs) }}
+      nameSuffix: ${{ fromJson(needs.getInputs.outputs.value).nameSuffix }}
+    secrets:
+      dockerHubToken: ${{ secrets.dockerHubToken }}

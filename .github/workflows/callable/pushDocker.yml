@@ -1,0 +1,152 @@
+name: pushDocker
+on:
+  workflow_call:
+    inputs:
+      arch:
+        type: string
+        required: false
+        description: List of image archs to build, comma separated without spaces
+      buildContext:
+        type: string
+        required: false
+        default: src
+      dockerHubUser:
+        type: string
+        required: false
+        description: If unset, the Docker Hub user will be the same as the GitHub user
+      dockerHubRegistry:
+        type: string
+        required: false
+        default: docker.io
+      githubRegistry:
+        type: string
+        required: false
+        default: ghcr.io
+      baseTags:
+        type: string
+        required: false
+        default: type=ref,event=branch
+      addShaTags:
+        type: boolean
+        required: false
+        default: false
+        description: If true, create a Docker image tag named after the commit’s SHA hash (good for persistence and debugging, but might produce a lot of clutter)
+      addScheduleTags:
+        type: boolean
+        required: false
+        default: false
+        description: If true, create Docker image tags named after the current date (good for persistence and debugging, but might produce a lot of clutter) (only on schedule events)
+      addVersionTag:
+        type: boolean
+        required: false
+        default: false
+        description: If true, create a Docker image tag named after the new current version (only on push tag events)
+      versionTagPrefix:
+        type: string
+        required: false
+        description: Will be appended to the automatically generated version tag (only if addVersionTag is true and event is push tag)
+      additionalTags:
+        type: string
+        required: false
+        default: null
+      versionTag:
+        type: string
+        required: false
+        default: null
+      versionTagSemverPrefix:
+        type: string
+        required: false
+        default: null
+        description: If given, this will be the semver’s prefix
+      flavorLatest:
+        type: string
+        required: false
+        default: auto
+      flavorPrefix:
+        type: string
+        required: false
+      flavorSuffix:
+        type: string
+        required: false
+      flavorConnectionString:
+        type: string
+        required: false
+        default: '-'
+      readmePath:
+        type: string
+        required: false
+        default: readme.md
+      buildArgs:
+        type: string
+        required: false
+      imageName:
+        type: string
+        required: false
+      ### testDocker
+      testEval:
+        type: string
+        required: false
+        default: status === 0
+      testDockerRunArgs:
+        type: string
+        required: false
+      testAppArgs:
+        type: string
+        required: false
+      ### makeDockerTagMatrix
+      matrixBases:
+        description: List of base images, split by anything
+        required: false
+        type: string
+      matrixPlatform:
+        description: List of platforms, split by anything
+        required: false
+        type: string
+      matrixAdditionEvals:
+        description: List of additional values, javascript object code without outer braces
+        required: false
+        type: string
+      matrixFlavorEval:
+        description: Javascript code to generate the id
+        required: false
+        type: string
+    secrets:
+      dockerHubToken:
+        required: false
+        description: 'Create here with “Read, Write”: https://hub.docker.com/settings/security?generateToken=true'
+    outputs:
+      meta:
+        value: ${{ jobs.push.outputs.meta }}
+      digest:
+        value: ${{ jobs.push.outputs.digest }}
+      imageId:
+        value: ${{ jobs.push.outputs.imageId }}
+      imageName:
+        value: ${{ jobs.push.outputs.imageName }}
+      imageSlug:
+        value: ${{ jobs.push.outputs.imageSlug }}
+      imageUser:
+        value: ${{ jobs.push.outputs.imageUser }}
+jobs:
+  makeMatrix:
+    name: makeMatrix
+    uses: ./.github/workflows/makeDockerTagMatrix.yml
+    with:
+      bases: ${{ inputs.matrixBases }}
+      platform: ${{ inputs.matrixPlatform }}
+      additionEvals: ${{ inputs.matrixAdditionEvals }}
+      flavorEval: ${{ inputs.matrixFlavorEval }}
+  invoke:
+    needs: makeMatrix
+    name: invoke${{ matrix.id != 'default' && format(' ({0})', matrix.id) || '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.makeMatrix.outputs.output) }}
+    uses: ./.github/workflows/executePushDocker.yml
+    with:
+      passedInputs: ${{ toJson(inputs) }}
+      matrixEntry: ${{ toJson(matrix) }}
+      nameSuffix: ${{ matrix.id != 'default' && format(' ({0})', matrix.id) || '' }}
+    secrets:
+      dockerHubToken: ${{ secrets.dockerHubToken }}

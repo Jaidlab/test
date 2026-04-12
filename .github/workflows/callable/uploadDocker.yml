@@ -1,0 +1,440 @@
+on:
+  workflow_call:
+    inputs:
+      arch:
+        type: string
+        required: false
+        default: linux/amd64
+        description: Image arch to build and push
+      dockerHubUser:
+        type: string
+        required: false
+        description: If unset, the Docker Hub user will be the same as the GitHub user
+      dockerHubRegistry:
+        type: string
+        required: false
+        default: docker.io
+      githubRegistry:
+        type: string
+        required: false
+        default: ghcr.io
+      baseTags:
+        type: string
+        required: false
+        default: type=ref,event=branch
+      addShaTags:
+        type: boolean
+        required: false
+        default: false
+        description: If true, create a Docker image tag named after the commit’s SHA hash (good for persistence and debugging, but might produce a lot of clutter)
+      addScheduleTags:
+        type: boolean
+        required: false
+        default: false
+        description: If true, create Docker image tags named after the current date (good for persistence and debugging, but might produce a lot of clutter) (only on schedule events)
+      addVersionTag:
+        type: boolean
+        required: false
+        default: false
+        description: If true, create a Docker image tag named after the new current version (only on push tag events)
+      versionTagPrefix:
+        type: string
+        required: false
+        description: Will be appended to the automatically generated version tag (only if addVersionTag is true and event is push tag)
+      additionalTags:
+        type: string
+        required: false
+        default: null
+      versionTag:
+        type: string
+        required: false
+        default: null
+      versionTagSemverPrefix:
+        type: string
+        required: false
+        default: null
+        description: If given, this will be the semver’s prefix
+      flavorLatest:
+        type: string
+        required: false
+        default: auto
+      flavorPrefix:
+        type: string
+        required: false
+      flavorSuffix:
+        type: string
+        required: false
+      flavorConnectionString:
+        type: string
+        required: false
+        default: '-'
+      nameSuffix:
+        type: string
+        required: false
+        description: Suffix to append to the job name
+      imageSlug:
+        type: string
+        required: false
+        description: Slug of the image
+      id:
+        type: string
+        required: false
+        description: ID of the image
+      buildOutput:
+        type: string
+        required: true
+        description: Output of the build job in JSON
+      title:
+        type: string
+        required: false
+        description: Title of the image
+    secrets:
+      dockerHubToken:
+        required: false
+        description: 'Create here with “Read, Write”: https://hub.docker.com/settings/security?generateToken=true'
+jobs:
+  upload:
+    name: upload${{ inputs.nameSuffix }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6.0.2
+      - name: setupBun
+        uses: oven-sh/setup-bun@v2.2.0
+      - id: getInputs
+        name: getInputs
+        run: |-
+          bun run - <<'EOF'
+          import {appendFile} from 'node:fs/promises'
+
+          const parseRequiredJsonEnv = <Output>(name: string) => {
+            const value = process.env[name]
+            if (value == null) {
+              throw new Error(`Missing required environment variable “${name}”.`)
+            }
+            return JSON.parse(value) as Output
+          }
+
+          const setOutput = async (name: string, value: unknown) => {
+            const rendered = String(value)
+            const delimiter = `output_${Math.random().toString(36).slice(2)}`
+            await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
+            console.log(`Output ${name}: ${rendered}`)
+          }
+
+          const camelCase = (input: string) => {
+            return input
+              .replaceAll(/([a-z\d])([A-Z])/g, '$1 $2')
+              .split(/[^A-Za-z0-9]+/)
+              .filter(part => part.length > 0)
+              .map((part, index) => {
+                const normalized = `${part[0]!.toUpperCase()}${part.slice(1)}`
+                if (index === 0) {
+                  return `${part[0]!.toLowerCase()}${part.slice(1)}`
+                }
+                return normalized
+              })
+              .join('')
+          }
+
+          const inputs = parseRequiredJsonEnv<Record<string, unknown>>('inputs')
+          const buildOutput = JSON.parse(String(inputs.buildOutput)) as Record<string, unknown>
+          const outputs: Record<string, unknown> = {
+            ...Object.fromEntries(Object.entries(inputs).filter(([key]) => key !== 'buildOutput')),
+          }
+          for (const [key, value] of Object.entries(buildOutput)) {
+            outputs[camelCase(`build ${key}`)] = value
+          }
+          if (!outputs.id) {
+            outputs.id = 'default'
+          }
+          if (!outputs.title) {
+            if (outputs.id === 'default') {
+              outputs.title = buildOutput.imageName
+            } else {
+              outputs.title = `${buildOutput.imageName} (${outputs.id})`
+            }
+          }
+          for (const key of Object.keys(outputs).sort((first, second) => first.localeCompare(second))) {
+            await setOutput(key, outputs[key])
+          }
+          await setOutput('value', JSON.stringify(outputs))
+          EOF
+        env:
+          inputs: ${{ toJSON(inputs) }}
+      - name: getDockerHubTokenLength
+        id: getDockerHubTokenLength
+        run: |-
+          bun run - <<'EOF'
+          import {appendFile} from 'node:fs/promises'
+
+          const parseRequiredJsonEnv = <Output>(name: string) => {
+            const value = process.env[name]
+            if (value == null) {
+              throw new Error(`Missing required environment variable “${name}”.`)
+            }
+            return JSON.parse(value) as Output
+          }
+
+          const setOutput = async (name: string, value: unknown) => {
+            const rendered = String(value)
+            const delimiter = `output_${Math.random().toString(36).slice(2)}`
+            await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
+            console.log(`Output ${name}: ${rendered}`)
+          }
+
+          const secrets = parseRequiredJsonEnv<{dockerHubToken?: string}>('secrets')
+          await setOutput('value', secrets.dockerHubToken?.length ?? 0)
+          EOF
+        env:
+          secrets: ${{ toJSON(secrets) }}
+      - name: getGithubPackagesRef
+        id: getGithubPackagesRef
+        run: |-
+          bun run - <<'EOF'
+          import {appendFile} from 'node:fs/promises'
+
+          const parseRequiredJsonEnv = <Output>(name: string) => {
+            const value = process.env[name]
+            if (value == null) {
+              throw new Error(`Missing required environment variable “${name}”.`)
+            }
+            return JSON.parse(value) as Output
+          }
+
+          const setOutput = async (name: string, value: unknown) => {
+            const rendered = String(value)
+            const delimiter = `output_${Math.random().toString(36).slice(2)}`
+            await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
+            console.log(`Output ${name}: ${rendered}`)
+          }
+
+          const repository = process.env.GITHUB_REPOSITORY
+          if (!repository) {
+            throw new Error('Missing required environment variable “GITHUB_REPOSITORY”.')
+          }
+          const inputs = parseRequiredJsonEnv<{buildImageName: string, githubRegistry: string}>('inputs')
+          const githubReference = `${inputs.githubRegistry}/${repository.toLowerCase()}/${inputs.buildImageName}`
+          await setOutput('value', githubReference)
+          EOF
+        env:
+          inputs: ${{ steps.getInputs.outputs.value }}
+      - name: getDockerHubRef
+        id: getDockerHubRef
+        if: ${{ steps.getDockerHubTokenLength.outputs.value > 0 }}
+        run: |-
+          bun run - <<'EOF'
+          import {appendFile} from 'node:fs/promises'
+
+          const parseRequiredJsonEnv = <Output>(name: string) => {
+            const value = process.env[name]
+            if (value == null) {
+              throw new Error(`Missing required environment variable “${name}”.`)
+            }
+            return JSON.parse(value) as Output
+          }
+
+          const setOutput = async (name: string, value: unknown) => {
+            const rendered = String(value)
+            const delimiter = `output_${Math.random().toString(36).slice(2)}`
+            await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
+            console.log(`Output ${name}: ${rendered}`)
+          }
+
+          const inputs = parseRequiredJsonEnv<{dockerHubRegistry: string, dockerHubUser?: string, imageSlug: string}>('inputs')
+          if (Number(process.env.dockerHubTokenLength ?? '0') > 0) {
+            const [slugUser, slugRepo] = inputs.imageSlug.split('/')
+            const user = inputs.dockerHubUser || slugUser
+            const dockerHubReference = `${inputs.dockerHubRegistry}/${user}/${slugRepo}`
+            await setOutput('value', dockerHubReference)
+          }
+          EOF
+        env:
+          inputs: ${{ steps.getInputs.outputs.value }}
+          dockerHubTokenLength: ${{ steps.getDockerHubTokenLength.outputs.value }}
+      - name: getRefs
+        id: getRefs
+        run: |-
+          bun run - <<'EOF'
+          import {appendFile} from 'node:fs/promises'
+
+          const parseRequiredJsonEnv = <Output>(name: string) => {
+            const value = process.env[name]
+            if (value == null) {
+              throw new Error(`Missing required environment variable “${name}”.`)
+            }
+            return JSON.parse(value) as Output
+          }
+
+          const setOutput = async (name: string, value: unknown) => {
+            const rendered = String(value)
+            const delimiter = `output_${Math.random().toString(36).slice(2)}`
+            await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
+            console.log(`Output ${name}: ${rendered}`)
+          }
+
+          parseRequiredJsonEnv<unknown>('inputs')
+          const references = [process.env.githubRef]
+          if (process.env.dockerHubRef) {
+            references.push(process.env.dockerHubRef)
+          }
+          await setOutput('value', references.join('\n'))
+          EOF
+        env:
+          inputs: ${{ steps.getInputs.outputs.value }}
+          githubRef: ${{ steps.getGithubPackagesRef.outputs.value }}
+          dockerHubRef: ${{ steps.getDockerHubRef.outputs.value }}
+      - name: prepareVersionTag
+        id: prepareVersionTag
+        run: |-
+          bun run - <<'EOF'
+          import {appendFile} from 'node:fs/promises'
+
+          const parseRequiredJsonEnv = <Output>(name: string) => {
+            const value = process.env[name]
+            if (value == null) {
+              throw new Error(`Missing required environment variable “${name}”.`)
+            }
+            return JSON.parse(value) as Output
+          }
+
+          const setOutput = async (name: string, value: unknown) => {
+            const rendered = String(value)
+            const delimiter = `output_${Math.random().toString(36).slice(2)}`
+            await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
+            console.log(`Output ${name}: ${rendered}`)
+          }
+
+          const inputs = parseRequiredJsonEnv<{versionTag?: string | null, versionTagSemverPrefix?: string | null}>('inputs')
+          const getCleanedVersionTag = (tag?: string | null) => {
+            if (!tag) {
+              return ''
+            }
+            if (inputs.versionTagSemverPrefix == null) {
+              return tag
+            }
+            const semver = /(?<versionPrefix>v?)(?<version>\d+\.\d+\.\d+)/.exec(tag)?.groups
+            if (semver) {
+              return `${inputs.versionTagSemverPrefix}${semver.version}`
+            }
+            return tag
+          }
+          await setOutput('value', getCleanedVersionTag(inputs.versionTag))
+          EOF
+        env:
+          inputs: ${{ steps.getInputs.outputs.value }}
+      - name: getTags
+        id: getTags
+        run: |-
+          bun run - <<'EOF'
+          import {appendFile} from 'node:fs/promises'
+
+          const parseRequiredJsonEnv = <Output>(name: string) => {
+            const value = process.env[name]
+            if (value == null) {
+              throw new Error(`Missing required environment variable “${name}”.`)
+            }
+            return JSON.parse(value) as Output
+          }
+
+          const setOutput = async (name: string, value: unknown) => {
+            const rendered = String(value)
+            const delimiter = `output_${Math.random().toString(36).slice(2)}`
+            await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
+            console.log(`Output ${name}: ${rendered}`)
+          }
+
+          type Inputs = {
+            addScheduleTags?: boolean
+            addShaTags?: boolean
+            addVersionTag?: boolean
+            additionalTags?: string | null
+            baseTags?: string | null
+            versionTagPrefix?: string | null
+          }
+          const inputs = parseRequiredJsonEnv<Inputs>('inputs')
+          const tags: string[] = []
+          const add = (input?: string | string[] | null) => {
+            if (!input) {
+              return
+            }
+            const addition = typeof input === 'string' ? input.split('\n') : input
+            for (const tag of addition) {
+              if (tag) {
+                tags.push(tag.trim())
+              }
+            }
+          }
+          add(inputs.baseTags)
+          add(inputs.additionalTags)
+          if (process.env.versionTag) {
+            add(`type=raw,value=${process.env.versionTag}`)
+          }
+          if (inputs.addVersionTag) {
+            add(`type=pep440,pattern=${inputs.versionTagPrefix ?? ''}{{version}}`)
+          }
+          if (inputs.addShaTags) {
+            add('type=sha,format=long')
+          }
+          if (inputs.addScheduleTags) {
+            add('type=schedule,pattern=nightly')
+            add(`type=schedule,pattern={{date 'YYYYMMDD'}}`)
+          }
+          if (!tags.length) {
+            console.error('No tags given')
+            process.exit(1)
+          }
+          await setOutput('value', tags.join('\n'))
+          EOF
+        env:
+          inputs: ${{ steps.getInputs.outputs.value }}
+          versionTag: ${{ steps.prepareVersionTag.outputs.value }}
+      - name: login (${{ steps.getInputs.outputs.dockerHubUser }} @ ${{ steps.getInputs.outputs.dockerHubRegistry }})
+        if: ${{ steps.getDockerHubTokenLength.outputs.value > 0 }}
+        uses: docker/login-action@v4.1.0
+        with:
+          username: ${{ steps.getInputs.outputs.dockerHubUser }}
+          password: ${{ secrets.dockerHubToken }}
+      - name: login (${{ github.repository_owner }} @ ${{ steps.getInputs.outputs.githubRegistry }})
+        uses: docker/login-action@v4.1.0
+        with:
+          registry: ${{ steps.getInputs.outputs.githubRegistry }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: extractDockerMetadata
+        id: extractDockerMetadata
+        uses: docker/metadata-action@v6.0.0
+        with:
+          images: ${{ steps.getRefs.outputs.value }}
+          labels: |
+            maintainer=${{ github.repository_owner }}
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
+            org.opencontainers.image.title=${{ steps.getInputs.outputs.title }}
+          tags: ${{ steps.getTags.outputs.value }}
+          flavor: |
+            latest=${{ steps.getInputs.outputs.flavorLatest }}
+            prefix=${{ steps.getInputs.outputs.flavorPrefix && format('{0}{1}', steps.getInputs.outputs.flavorPrefix, steps.getInputs.outputs.flavorConnectionString) || '' }}
+            suffix=${{ steps.getInputs.outputs.flavorSuffix && format('{0}{1}', steps.getInputs.outputs.flavorConnectionString, steps.getInputs.outputs.flavorSuffix) || '' }}
+      - name: setupQemu
+        if: ${{ steps.getInputs.outputs.arch != 'linux/amd64' }}
+        uses: docker/setup-qemu-action@v4.0.0
+        with:
+          platforms: ${{ steps.getInputs.outputs.arch }}
+      - name: setupBuildx
+        uses: docker/setup-buildx-action@v4.0.0
+        with:
+          platforms: ${{ steps.getInputs.outputs.arch }}
+      - name: dockerPush
+        id: dockerPush
+        uses: docker/build-push-action@v7.0.0
+        with:
+          push: true
+          platforms: ${{ steps.getInputs.outputs.arch }}
+          tags: ${{ steps.extractDockerMetadata.outputs.tags }}
+          labels: ${{ steps.extractDockerMetadata.outputs.labels }}
+          cache-from: ${{ fromJson(steps.getInputs.outputs.buildInputs).cacheHint }}
+          context: ${{ steps.getInputs.outputs.buildContext }}
+          build-args: ${{ steps.getInputs.outputs.buildBuildArgs }}
