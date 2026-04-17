@@ -95,6 +95,12 @@ jobs:
         run: |
           set -o xtrace
           jq --indent 2 --color-output . <<< "$object"
+      - id: bunTest
+        name: bunTest
+        uses: jaidlab/action-run-typescript@main
+        with:
+          code: |-
+            console.log('test')
       - id: actionsGithubContext
         name: '@actions/github context'
         run: |-
