@@ -2,6 +2,7 @@
   "name": "test",
   "version": "0.1.0",
   "type": "module",
+  "description": "sandbox project for rapid and destructive prototyping",
   "funding": "https://github.com/sponsors/Jaid",
   "license": "MIT",
   "repository": {
