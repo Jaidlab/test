@@ -80,8 +80,14 @@ jobs:
         id: extractSemvers
         uses: jaidlab/action-run-typescript@main
         with:
+          globals: |-
+            {
+              steps: ${{ toJson(steps) }}
+            }
           code: |-
             import {appendFile, writeFile} from 'node:fs/promises'
+
+            console.dir(globalThis)
 
             const setOutput = async (name: string, value: unknown) => {
               const rendered = String(value)
@@ -105,10 +111,6 @@ jobs:
               await writeFile(process.env.GITHUB_STEP_SUMMARY!, `[${oldTag}](${github.event.repository.html_url}/releases/tag/${oldTag}) → [${newTag}](${github.event.repository.html_url}/releases/tag/${newTag})`)
             } else {
               await writeFile(process.env.GITHUB_STEP_SUMMARY!, `[${newTag}](${github.event.repository.html_url}/releases/tag/${newTag})`)
-            }
-          globals: |-
-            {
-              steps: ${{ toJson(steps) }},
             }
       - name: getReleaseTexts
         id: getReleaseTexts
