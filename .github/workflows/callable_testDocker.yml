@@ -61,9 +61,12 @@ jobs:
               inputs: ${{ toJSON(inputs) }},
             }
           code: |-
-            const setOutput = (name: string, value: unknown) => {
+            import {appendFile} from 'node:fs/promises'
+
+            const setOutput = async (name: string, value: unknown) => {
               const rendered = String(value)
-              core.setOutput(name, rendered)
+              const delimiter = `output_${Math.random().toString(36).slice(2)}`
+              await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
               console.log(`Output ${name}: ${rendered}`)
             }
 
@@ -80,9 +83,9 @@ jobs:
               outputs.imageFolder = `/tmp/dockerBuild/${github.run_id}_${outputs.id}`
             }
             for (const [key, value] of Object.entries(outputs)) {
-              setOutput(key, value)
+              await setOutput(key, value)
             }
-            setOutput('value', JSON.stringify(outputs))
+            await setOutput('value', JSON.stringify(outputs))
       - name: loadArtifact
         uses: actions/download-artifact@v8.0.1
         with:

@@ -108,11 +108,13 @@ jobs:
               inputs: ${{ toJSON(inputs) }},
             }
           code: |-
+            import {appendFile} from 'node:fs/promises'
             import path from 'node:path'
 
-            const setOutput = (name: string, value: unknown) => {
+            const setOutput = async (name: string, value: unknown) => {
               const rendered = String(value)
-              core.setOutput(name, rendered)
+              const delimiter = `output_${Math.random().toString(36).slice(2)}`
+              await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
               console.log(`Output ${name}: ${rendered}`)
             }
 
@@ -152,9 +154,9 @@ jobs:
               outputs.imageIdentifier = `${outputs.imageName}:${outputs.tag}`
             }
             for (const [key, value] of Object.entries(outputs)) {
-              setOutput(key, value)
+              await setOutput(key, value)
             }
-            setOutput('value', JSON.stringify(outputs))
+            await setOutput('value', JSON.stringify(outputs))
       - name: setupQemu
         if: ${{ steps.getInputs.outputs.arch != 'linux/amd64' }}
         uses: docker/setup-qemu-action@v4.0.0

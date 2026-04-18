@@ -111,9 +111,12 @@ jobs:
               inputs: ${{ toJSON(inputs) }},
             }
           code: |-
-            const setOutput = (name: string, value: unknown) => {
+            import {appendFile} from 'node:fs/promises'
+
+            const setOutput = async (name: string, value: unknown) => {
               const rendered = String(value)
-              core.setOutput(name, rendered)
+              const delimiter = `output_${Math.random().toString(36).slice(2)}`
+              await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
               console.log(`Output ${name}: ${rendered}`)
             }
 
@@ -150,9 +153,9 @@ jobs:
               }
             }
             for (const key of Object.keys(outputs).sort((first, second) => first.localeCompare(second))) {
-              setOutput(key, outputs[key])
+              await setOutput(key, outputs[key])
             }
-            setOutput('value', JSON.stringify(outputs))
+            await setOutput('value', JSON.stringify(outputs))
       - name: getDockerHubTokenLength
         id: getDockerHubTokenLength
         uses: jaidlab/action-run-typescript@main
@@ -162,13 +165,16 @@ jobs:
               secrets: ${{ toJSON(secrets) }},
             }
           code: |-
-            const setOutput = (name: string, value: unknown) => {
+            import {appendFile} from 'node:fs/promises'
+
+            const setOutput = async (name: string, value: unknown) => {
               const rendered = String(value)
-              core.setOutput(name, rendered)
+              const delimiter = `output_${Math.random().toString(36).slice(2)}`
+              await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
               console.log(`Output ${name}: ${rendered}`)
             }
 
-            setOutput('value', secrets.dockerHubToken?.length ?? 0)
+            await setOutput('value', secrets.dockerHubToken?.length ?? 0)
       - name: getGithubPackagesRef
         id: getGithubPackagesRef
         uses: jaidlab/action-run-typescript@main
@@ -179,9 +185,12 @@ jobs:
               inputs: ${{ steps.getInputs.outputs.value }},
             }
           code: |-
-            const setOutput = (name: string, value: unknown) => {
+            import {appendFile} from 'node:fs/promises'
+
+            const setOutput = async (name: string, value: unknown) => {
               const rendered = String(value)
-              core.setOutput(name, rendered)
+              const delimiter = `output_${Math.random().toString(36).slice(2)}`
+              await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
               console.log(`Output ${name}: ${rendered}`)
             }
 
@@ -189,7 +198,7 @@ jobs:
               throw new Error('Missing required github.repository value.')
             }
             const githubReference = `${inputs.githubRegistry}/${github.repository.toLowerCase()}/${inputs.buildImageName}`
-            setOutput('value', githubReference)
+            await setOutput('value', githubReference)
       - name: getDockerHubRef
         id: getDockerHubRef
         if: ${{ steps.getDockerHubTokenLength.outputs.value > 0 }}
@@ -200,16 +209,19 @@ jobs:
               inputs: ${{ steps.getInputs.outputs.value }},
             }
           code: |-
-            const setOutput = (name: string, value: unknown) => {
+            import {appendFile} from 'node:fs/promises'
+
+            const setOutput = async (name: string, value: unknown) => {
               const rendered = String(value)
-              core.setOutput(name, rendered)
+              const delimiter = `output_${Math.random().toString(36).slice(2)}`
+              await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
               console.log(`Output ${name}: ${rendered}`)
             }
 
             const [slugUser, slugRepo] = inputs.imageSlug.split('/')
             const user = inputs.dockerHubUser || slugUser
             const dockerHubReference = `${inputs.dockerHubRegistry}/${user}/${slugRepo}`
-            setOutput('value', dockerHubReference)
+            await setOutput('value', dockerHubReference)
       - name: getRefs
         id: getRefs
         uses: jaidlab/action-run-typescript@main
@@ -220,9 +232,12 @@ jobs:
               githubRef: ${{ toJSON(steps.getGithubPackagesRef.outputs.value) }},
             }
           code: |-
-            const setOutput = (name: string, value: unknown) => {
+            import {appendFile} from 'node:fs/promises'
+
+            const setOutput = async (name: string, value: unknown) => {
               const rendered = String(value)
-              core.setOutput(name, rendered)
+              const delimiter = `output_${Math.random().toString(36).slice(2)}`
+              await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
               console.log(`Output ${name}: ${rendered}`)
             }
 
@@ -230,7 +245,7 @@ jobs:
             if (dockerHubRef) {
               references.push(dockerHubRef)
             }
-            setOutput('value', references.join('\n'))
+            await setOutput('value', references.join('\n'))
       - name: prepareVersionTag
         id: prepareVersionTag
         uses: jaidlab/action-run-typescript@main
@@ -240,9 +255,12 @@ jobs:
               inputs: ${{ steps.getInputs.outputs.value }},
             }
           code: |-
-            const setOutput = (name: string, value: unknown) => {
+            import {appendFile} from 'node:fs/promises'
+
+            const setOutput = async (name: string, value: unknown) => {
               const rendered = String(value)
-              core.setOutput(name, rendered)
+              const delimiter = `output_${Math.random().toString(36).slice(2)}`
+              await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
               console.log(`Output ${name}: ${rendered}`)
             }
 
@@ -259,7 +277,7 @@ jobs:
               }
               return tag
             }
-            setOutput('value', getCleanedVersionTag(inputs.versionTag))
+            await setOutput('value', getCleanedVersionTag(inputs.versionTag))
       - name: getTags
         id: getTags
         uses: jaidlab/action-run-typescript@main
@@ -270,6 +288,8 @@ jobs:
               versionTag: ${{ toJSON(steps.prepareVersionTag.outputs.value) }},
             }
           code: |-
+            import {appendFile} from 'node:fs/promises'
+
             type Inputs = {
               addScheduleTags?: boolean
               addShaTags?: boolean
@@ -279,9 +299,10 @@ jobs:
               versionTagPrefix?: string | null
             }
 
-            const setOutput = (name: string, value: unknown) => {
+            const setOutput = async (name: string, value: unknown) => {
               const rendered = String(value)
-              core.setOutput(name, rendered)
+              const delimiter = `output_${Math.random().toString(36).slice(2)}`
+              await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
               console.log(`Output ${name}: ${rendered}`)
             }
 
@@ -315,7 +336,7 @@ jobs:
             if (!tags.length) {
               throw new Error('No tags given')
             }
-            setOutput('value', tags.join('\n'))
+            await setOutput('value', tags.join('\n'))
       - name: login (${{ steps.getInputs.outputs.dockerHubUser }} @ ${{ steps.getInputs.outputs.dockerHubRegistry }})
         if: ${{ steps.getDockerHubTokenLength.outputs.value > 0 }}
         uses: docker/login-action@v4.1.0
