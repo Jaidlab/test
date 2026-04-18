@@ -68,8 +68,6 @@ jobs:
         uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
-      - name: setupBun
-        uses: oven-sh/setup-bun@v2.2.0
       - name: createTag
         id: createTag
         uses: anothrNick/github-tag-action@1.75.0
@@ -80,41 +78,36 @@ jobs:
           RELEASE_BRANCHES: ${{ inputs.releaseBranch }}
       - name: extractSemvers
         id: extractSemvers
-        run: |-
-          bun run - <<'EOF'
-          import {appendFile} from 'node:fs/promises'
-
-          function parseRequiredJsonEnv<Output>(name: string) {
-            const value = process.env[name]
-            if (value == null) {
-              throw new Error(`Missing required environment variable “${name}”.`)
+        uses: jaidlab/action-run-typescript@main
+        with:
+          globals: |-
+            {
+              github: ${{ toJson(github) }},
+              steps: ${{ toJson(steps) }},
             }
-            return JSON.parse(value) as Output
-          }
+          code: |-
+            const setOutput = (name: string, value: unknown) => {
+              const rendered = String(value)
+              core.setOutput(name, rendered)
+              console.log(`Output ${name}: ${rendered}`)
+            }
 
-          const setOutput = async (name: string, value: unknown) => {
-            const rendered = String(value)
-            const delimiter = `output_${Math.random().toString(36).slice(2)}`
-            await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
-            console.log(`Output ${name}: ${rendered}`)
-          }
-
-          const steps = parseRequiredJsonEnv<Record<string, {outputs: Record<string, string>}>>('steps')
-          const extractSemver = (tag: string) => {
-            return /(?<versionPrefix>v?)(?<version>\d+\.\d+\.\d+)/.exec(tag)?.groups
-          }
-          const newSemver = extractSemver(steps.createTag.outputs.new_tag)
-          console.dir({
-            newSemver,
-            newTag: steps.createTag.outputs.new_tag,
-          })
-          await setOutput('newSemver', newSemver?.version ?? '')
-          const github = parseRequiredJsonEnv<Record<string, unknown>>('github')
-          await Bun.write(Bun.env.GITHUB_STEP_SUMMARY, `[${steps.createTag.outputs.old_tag}](${github.event.repository.html_url}/releases/tag/${steps.createTag.outputs.old_tag}) → [${steps.createTag.outputs.new_tag}](${github.event.repository.html_url}/releases/tag/${steps.createTag.outputs.new_tag})`)
-          EOF
-        env:
-          steps: ${{ toJson(steps) }}
-          github: ${{ toJson(github) }}
+            const extractSemver = (tag: string) => {
+              return /(?<versionPrefix>v?)(?<version>\d+\.\d+\.\d+)/.exec(tag)?.groups
+            }
+            const oldTag = steps.createTag.outputs.old_tag
+            const newTag = steps.createTag.outputs.new_tag
+            const newSemver = extractSemver(newTag)
+            console.dir({
+              newSemver,
+              newTag,
+            })
+            setOutput('newSemver', newSemver?.version ?? '')
+            if (oldTag) {
+              core.summary.write(`[${oldTag}](${github.event.repository.html_url}/releases/tag/${oldTag}) → [${newTag}](${github.event.repository.html_url}/releases/tag/${newTag})`)
+            } else {
+              core.summary.write(`[${newTag}](${github.event.repository.html_url}/releases/tag/${newTag})`)
+            }
       - name: getReleaseTexts
         id: getReleaseTexts
         shell: bash
@@ -124,7 +117,7 @@ jobs:
           releaseBody: ${{ format(inputs.releaseBody, github.repository_owner, github.event.repository.name, steps.createTag.outputs.old_tag, steps.createTag.outputs.new_tag) }}
           initialReleaseTitle: ${{ format(inputs.initialReleaseTitle, github.repository_owner, github.event.repository.name, steps.createTag.outputs.new_tag) }}
           initialReleaseBody: ${{ format(inputs.initialReleaseBody, github.repository_owner, github.event.repository.name, steps.createTag.outputs.new_tag) }}
-        run: |
+        run: |-
           if [[ -n $oldTag ]]; then
             printf title=%s "$releaseTitle" > $GITHUB_OUTPUT
             printf '\nbody=%s' "$releaseBody" >> $GITHUB_OUTPUT
@@ -143,39 +136,29 @@ jobs:
           makeLatest: ${{ inputs.makeLatest }}
       - name: prepareDispatch
         id: prepareDispatch
-        run: |-
-          bun run - <<'EOF'
-          import {appendFile} from 'node:fs/promises'
-
-          function parseRequiredJsonEnv<Output>(name: string) {
-            const value = process.env[name]
-            if (value == null) {
-              throw new Error(`Missing required environment variable “${name}”.`)
+        uses: jaidlab/action-run-typescript@main
+        with:
+          globals: |-
+            {
+              steps: ${{ toJson(steps) }},
             }
-            return JSON.parse(value) as Output
-          }
+          code: |-
+            const setOutput = (name: string, value: unknown) => {
+              const rendered = String(value)
+              core.setOutput(name, rendered)
+              console.log(`Output ${name}: ${rendered}`)
+            }
 
-          const setOutput = async (name: string, value: unknown) => {
-            const rendered = String(value)
-            const delimiter = `output_${Math.random().toString(36).slice(2)}`
-            await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
-            console.log(`Output ${name}: ${rendered}`)
-          }
-
-          const steps = parseRequiredJsonEnv<Record<string, {outputs: Record<string, string>}>>('steps')
-          const output = {
-            newSemver: steps.extractSemvers.outputs.newSemver,
-            newTag: steps.createTag.outputs.new_tag,
-            oldTag: steps.createTag.outputs.old_tag,
-            releaseBody: steps.getReleaseTexts.outputs.body,
-            releaseId: steps.updateRelease.outputs.id,
-            releaseTitle: steps.getReleaseTexts.outputs.title,
-            releaseUrl: steps.updateRelease.outputs.html_url,
-          }
-          await setOutput('value', JSON.stringify(output))
-          EOF
-        env:
-          steps: ${{ toJson(steps) }}
+            const output = {
+              newSemver: steps.extractSemvers.outputs.newSemver,
+              newTag: steps.createTag.outputs.new_tag,
+              oldTag: steps.createTag.outputs.old_tag,
+              releaseBody: steps.getReleaseTexts.outputs.body,
+              releaseId: steps.updateRelease.outputs.id,
+              releaseTitle: steps.getReleaseTexts.outputs.title,
+              releaseUrl: steps.updateRelease.outputs.html_url,
+            }
+            setOutput('value', JSON.stringify(output))
       - name: triggerDispatch
         id: triggerDispatch
         uses: peter-evans/repository-dispatch@v4.0.1

@@ -43,114 +43,103 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v6.0.2
-      - name: setupBun
-        uses: oven-sh/setup-bun@v2.2.0
       - id: getInputs
         name: getInputs
-        run: |-
-          bun run - <<'EOF'
-          import {appendFile} from 'node:fs/promises'
-
-          function parseRequiredJsonEnv<Output>(name: string) {
-            const value = process.env[name]
-            if (value == null) {
-              throw new Error(`Missing required environment variable “${name}”.`)
+        uses: jaidlab/action-run-typescript@main
+        with:
+          globals: |-
+            {
+              github: ${{ toJson(github) }},
+              inputs: ${{ toJson(inputs) }},
             }
-            return JSON.parse(value) as Output
-          }
-
-          const setOutput = async (name: string, value: unknown) => {
-            const rendered = String(value)
-            const delimiter = `output_${Math.random().toString(36).slice(2)}`
-            await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
-            console.log(`Output ${name}: ${rendered}`)
-          }
-
-          const getRepositoryFields = () => {
-            const repository = process.env.GITHUB_REPOSITORY
-            if (!repository) {
-              throw new Error('Missing required environment variable “GITHUB_REPOSITORY”.')
+          code: |-
+            const setOutput = (name: string, value: unknown) => {
+              const rendered = String(value)
+              core.setOutput(name, rendered)
+              console.log(`Output ${name}: ${rendered}`)
             }
-            const [owner, name] = repository.split('/')
-            if (!owner || !name) {
-              throw new Error(`Invalid GITHUB_REPOSITORY value: ${repository}`)
-            }
-            return {
-              name,
-              owner,
-            }
-          }
 
-          const camelCase = (input: string) => {
-            return input
-              .replaceAll(/([a-z\d])([A-Z])/g, '$1 $2')
-              .split(/[^A-Za-z0-9]+/)
-              .filter(part => part.length > 0)
-              .map((part, index) => {
-                const normalized = `${part[0]!.toUpperCase()}${part.slice(1)}`
-                if (index === 0) {
-                  return `${part[0]!.toLowerCase()}${part.slice(1)}`
-                }
-                return normalized
-              })
-              .join('')
-          }
-
-          const preventStart = (value: string, badStart: string) => {
-            if (value.startsWith(badStart)) {
-              return value.slice(badStart.length)
+            const getRepositoryFields = () => {
+              const repository = github.repository
+              if (!repository) {
+                throw new Error('Missing required github.repository value.')
+              }
+              const [owner, name] = repository.split('/')
+              if (!owner || !name) {
+                throw new Error(`Invalid github.repository value: ${repository}`)
+              }
+              return {
+                name,
+                owner,
+              }
             }
-            return value
-          }
 
-          const inputs = parseRequiredJsonEnv<Record<string, unknown>>('inputs')
-          const passedInputs = JSON.parse(String(inputs.passedInputs)) as Record<string, unknown>
-          const matrixEntry = JSON.parse(String(inputs.matrixEntry)) as Record<string, unknown>
-          if ((process.env.RUNNER_DEBUG ?? '').trim() === '1') {
-            console.dir({
-              inputs,
-              matrixEntry,
-              passedInputs,
-            }, {depth: null})
-          }
-          console.dir(Object.fromEntries(Object.entries(inputs).filter(([key]) => !['passedInputs', 'matrixEntry'].includes(key))), {depth: null})
-          const outputs: Record<string, unknown> = {
-            ...Object.fromEntries(Object.entries(inputs).filter(([key]) => !['passedInputs', 'matrixEntry'].includes(key))),
-            ...passedInputs,
-          }
-          for (const [key, value] of Object.entries(matrixEntry)) {
-            outputs[camelCase(`matrix ${key}`)] = value
-          }
-          const {name: repositoryName, owner: repositoryOwner} = getRepositoryFields()
-          if (!outputs.imageName) {
-            outputs.imageName = preventStart(repositoryName.toLowerCase(), 'docker-')
-          }
-          if (!outputs.imageUser) {
-            outputs.imageUser = repositoryOwner.toLowerCase()
-          }
-          if (!outputs.imageSlug) {
-            outputs.imageSlug = `${outputs.imageUser}/${outputs.imageName}`
-          }
-          if (!outputs.imageArtifact) {
-            outputs.imageArtifact = `${process.env.GITHUB_RUN_ID}_${outputs.matrixId}`
-          }
-          if (!outputs.imageFolder) {
-            outputs.imageFolder = `/tmp/dockerBuild/${process.env.GITHUB_RUN_ID}_${outputs.matrixId}`
-          }
-          if (!outputs.nameSuffix) {
-            if (outputs.matrixId && outputs.matrixId !== 'default') {
-              outputs.nameSuffix = ` (${outputs.matrixId})`
-            } else {
-              outputs.nameSuffix = ''
+            const camelCase = (input: string) => {
+              return input
+                .replaceAll(/([a-z\d])([A-Z])/g, '$1 $2')
+                .split(/[^A-Za-z0-9]+/)
+                .filter(part => part.length > 0)
+                .map((part, index) => {
+                  const normalized = `${part[0]!.toUpperCase()}${part.slice(1)}`
+                  if (index === 0) {
+                    return `${part[0]!.toLowerCase()}${part.slice(1)}`
+                  }
+                  return normalized
+                })
+                .join('')
             }
-          }
-          for (const key of Object.keys(outputs).sort((first, second) => first.localeCompare(second))) {
-            await setOutput(key, outputs[key])
-          }
-          await setOutput('value', JSON.stringify(outputs))
-          EOF
-        env:
-          inputs: ${{ toJson(inputs) }}
+
+            const preventStart = (value: string, badStart: string) => {
+              if (value.startsWith(badStart)) {
+                return value.slice(badStart.length)
+              }
+              return value
+            }
+
+            const passedInputs = JSON.parse(String(inputs.passedInputs)) as Record<string, unknown>
+            const matrixEntry = JSON.parse(String(inputs.matrixEntry)) as Record<string, unknown>
+            if ((process.env.RUNNER_DEBUG ?? '').trim() === '1') {
+              console.dir({
+                inputs,
+                matrixEntry,
+                passedInputs,
+              }, {depth: null})
+            }
+            console.dir(Object.fromEntries(Object.entries(inputs).filter(([key]) => !['passedInputs', 'matrixEntry'].includes(key))), {depth: null})
+            const outputs: Record<string, unknown> = {
+              ...Object.fromEntries(Object.entries(inputs).filter(([key]) => !['passedInputs', 'matrixEntry'].includes(key))),
+              ...passedInputs,
+            }
+            for (const [key, value] of Object.entries(matrixEntry)) {
+              outputs[camelCase(`matrix ${key}`)] = value
+            }
+            const {name: repositoryName, owner: repositoryOwner} = getRepositoryFields()
+            if (!outputs.imageName) {
+              outputs.imageName = preventStart(repositoryName.toLowerCase(), 'docker-')
+            }
+            if (!outputs.imageUser) {
+              outputs.imageUser = repositoryOwner.toLowerCase()
+            }
+            if (!outputs.imageSlug) {
+              outputs.imageSlug = `${outputs.imageUser}/${outputs.imageName}`
+            }
+            if (!outputs.imageArtifact) {
+              outputs.imageArtifact = `${github.run_id}_${outputs.matrixId}`
+            }
+            if (!outputs.imageFolder) {
+              outputs.imageFolder = `/tmp/dockerBuild/${github.run_id}_${outputs.matrixId}`
+            }
+            if (!outputs.nameSuffix) {
+              if (outputs.matrixId && outputs.matrixId !== 'default') {
+                outputs.nameSuffix = ` (${outputs.matrixId})`
+              } else {
+                outputs.nameSuffix = ''
+              }
+            }
+            for (const key of Object.keys(outputs).sort((first, second) => first.localeCompare(second))) {
+              setOutput(key, outputs[key])
+            }
+            setOutput('value', JSON.stringify(outputs))
   build:
     name: build${{ fromJson(needs.getInputs.outputs.value).nameSuffix }}
     needs: getInputs

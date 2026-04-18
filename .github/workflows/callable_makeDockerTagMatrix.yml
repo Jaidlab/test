@@ -36,130 +36,119 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v6.0.2
-      - name: setupBun
-        uses: oven-sh/setup-bun@v2.2.0
       - id: makeMatrix
         name: makeMatrix
-        run: |-
-          bun run - <<'EOF'
-          import {appendFile} from 'node:fs/promises'
-          import {runInNewContext} from 'node:vm'
-
-          type Input = {
-            additionEvals?: string
-            bases?: string
-            flavorEval?: string
-            platform?: string
-          }
-          type GithubRunnerArch = 'arm64' | 'arm' | 'x64'
-          type DockerArch = 'linux/386' | 'linux/amd64' | 'linux/arm64/v8' | 'linux/arm/v5' | 'linux/arm/v7' | 'linux/mips64le' | 'linux/ppc64le' | 'linux/riscv64' | 'linux/s390x'
-          type MatrixEntry = {
-            base: string
-            buildArgs?: string
-            flavor?: string
-            id?: string
-            isNativeArch: boolean
-            platform: DockerArch
-            [key: string]: unknown
-          }
-
-          function parseRequiredJsonEnv<Output>(name: string) {
-            const value = process.env[name]
-            if (value == null) {
-              throw new Error(`Missing required environment variable “${name}”.`)
+        uses: jaidlab/action-run-typescript@main
+        with:
+          globals: |-
+            {
+              inputs: ${{ toJSON(inputs) }},
+              runner: ${{ toJSON(runner) }},
             }
-            return JSON.parse(value) as Output
-          }
+          code: |-
+            import {runInNewContext} from 'node:vm'
 
-          const setOutput = async (name: string, value: unknown) => {
-            const rendered = String(value)
-            const delimiter = `output_${Math.random().toString(36).slice(2)}`
-            await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
-            console.log(`Output ${name}: ${rendered}`)
-          }
+            type Input = {
+              additionEvals?: string
+              bases?: string
+              flavorEval?: string
+              platform?: string
+            }
+            type GithubRunnerArch = 'arm64' | 'arm' | 'x64'
+            type DockerArch = 'linux/386' | 'linux/amd64' | 'linux/arm64/v8' | 'linux/arm/v5' | 'linux/arm/v7' | 'linux/mips64le' | 'linux/ppc64le' | 'linux/riscv64' | 'linux/s390x'
+            type MatrixEntry = {
+              base: string
+              buildArgs?: string
+              flavor?: string
+              id?: string
+              isNativeArch: boolean
+              platform: DockerArch
+              [key: string]: unknown
+            }
 
-          function runInSandbox<Output>(code: string, sandbox: Record<string, unknown>, timeout = 60_000) {
-            return runInNewContext(code, sandbox, {timeout}) as Output
-          }
+            const setOutput = (name: string, value: unknown) => {
+              const rendered = String(value)
+              core.setOutput(name, rendered)
+              console.log(`Output ${name}: ${rendered}`)
+            }
 
-          const inputs = parseRequiredJsonEnv<Input>('inputs')
-          const currentArch = process.env.arch!.toLowerCase() as GithubRunnerArch
-          const flavorEval = inputs.flavorEval || `[
-            baseShortcuts[base] ?? base,
-            platformShortcuts[platform] ?? platform.replaceAll('/', '_')
-          ].filter(part => part?.length).join('-')`
-          console.dir({inputs}, {depth: null})
-          const matchAll = (regex: RegExp, input: string) => {
-            return Array.from(input.matchAll(regex), match => match.groups?.match ?? '')
-          }
-          const compareNativeArch = (platform: DockerArch) => {
-            if (currentArch === 'x64') {
-              return platform === 'linux/amd64'
+            function runInSandbox<Output>(code: string, sandbox: Record<string, unknown>, timeout = 60_000) {
+              return runInNewContext(code, sandbox, {timeout}) as Output
             }
-            if (currentArch === 'arm64') {
-              return platform === 'linux/arm64/v8'
+
+            const currentArch = String(runner.arch || '').toLowerCase() as GithubRunnerArch
+            const flavorEval = inputs.flavorEval || `[
+              baseShortcuts[base] ?? base,
+              platformShortcuts[platform] ?? platform.replaceAll('/', '_')
+            ].filter(part => part?.length).join('-')`
+            console.dir({inputs}, {depth: null})
+            const matchAll = (regex: RegExp, input: string) => {
+              return Array.from(input.matchAll(regex), match => match.groups?.match ?? '')
             }
-            if (currentArch === 'arm') {
-              return platform === 'linux/arm/v7'
-            }
-            return false
-          }
-          const bases = inputs.bases ? matchAll(/(?<match>[\w\-:]+)/g, inputs.bases) : ['']
-          const platforms = inputs.platform ? matchAll(/(?<match>[\d/a-z]+)/g, inputs.platform).map(match => match as DockerArch) : ['linux/amd64']
-          const additions = inputs.additionEvals
-            ? inputs.additionEvals.split('\n').map(line => line.trim()).filter(line => line.length > 0)
-            : []
-          const matrix: MatrixEntry[] = []
-          const nativeArchMatrix: MatrixEntry[] = []
-          for (const base of bases) {
-            for (const platform of platforms) {
-              const entry: MatrixEntry = {
-                base,
-                platform,
-                isNativeArch: false,
+            const compareNativeArch = (platform: DockerArch) => {
+              if (currentArch === 'x64') {
+                return platform === 'linux/amd64'
               }
-              entry.isNativeArch = compareNativeArch(entry.platform)
-              if (additions.length > 0) {
-                for (const addition of additions) {
-                  const match = /^(?<key>\w+)\s*:\s*(?<code>.+)$/.exec(addition)?.groups
-                  if (!match?.key || !match.code) {
-                    throw new Error(`Invalid addition expression: ${addition}`)
+              if (currentArch === 'arm64') {
+                return platform === 'linux/arm64/v8'
+              }
+              if (currentArch === 'arm') {
+                return platform === 'linux/arm/v7'
+              }
+              return false
+            }
+            const bases = inputs.bases ? matchAll(/(?<match>[\w\-:]+)/g, inputs.bases) : ['']
+            const platforms = inputs.platform ? matchAll(/(?<match>[\d/a-z]+)/g, inputs.platform).map(match => match as DockerArch) : ['linux/amd64']
+            const additions = inputs.additionEvals
+              ? inputs.additionEvals.split('\n').map(line => line.trim()).filter(line => line.length > 0)
+              : []
+            const matrix: MatrixEntry[] = []
+            const nativeArchMatrix: MatrixEntry[] = []
+            for (const base of bases) {
+              for (const platform of platforms) {
+                const entry: MatrixEntry = {
+                  base,
+                  platform,
+                  isNativeArch: false,
+                }
+                entry.isNativeArch = compareNativeArch(entry.platform)
+                if (additions.length > 0) {
+                  for (const addition of additions) {
+                    const match = /^(?<key>\w+)\s*:\s*(?<code>.+)$/.exec(addition)?.groups
+                    if (!match?.key || !match.code) {
+                      throw new Error(`Invalid addition expression: ${addition}`)
+                    }
+                    entry[match.key] = runInSandbox(match.code, {...entry})
                   }
-                  entry[match.key] = runInSandbox(match.code, {...entry})
+                }
+                const platformShortcuts = {
+                  'linux/386': '386',
+                  'linux/amd64': false,
+                  'linux/arm/v7': 'arm7',
+                  'linux/arm64/v8': 'arm8',
+                  'linux/ppc64le': 'ppc',
+                  'linux/riscv64': 'riscv',
+                  'linux/s390x': 's390x',
+                }
+                const baseShortcuts = {
+                  'debian:stable-slim': 'debian',
+                  'ubuntu:latest': 'lts',
+                  'ubuntu:rolling': false,
+                }
+                entry.flavor = runInSandbox<string | undefined>(flavorEval, {
+                  ...entry,
+                  baseShortcuts,
+                  platformShortcuts,
+                })
+                entry.buildArgs = Object.entries(entry).map(([key, value]) => `${key}=${value}`).join('\n')
+                entry.id = entry.flavor || 'default'
+                matrix.push(entry)
+                if (entry.isNativeArch) {
+                  nativeArchMatrix.push(entry)
                 }
               }
-              const platformShortcuts = {
-                'linux/386': '386',
-                'linux/amd64': false,
-                'linux/arm/v7': 'arm7',
-                'linux/arm64/v8': 'arm8',
-                'linux/ppc64le': 'ppc',
-                'linux/riscv64': 'riscv',
-                'linux/s390x': 's390x',
-              }
-              const baseShortcuts = {
-                'debian:stable-slim': 'debian',
-                'ubuntu:latest': 'lts',
-                'ubuntu:rolling': false,
-              }
-              entry.flavor = runInSandbox<string | undefined>(flavorEval, {
-                ...entry,
-                baseShortcuts,
-                platformShortcuts,
-              })
-              entry.buildArgs = Object.entries(entry).map(([key, value]) => `${key}=${value}`).join('\n')
-              entry.id = entry.flavor || 'default'
-              matrix.push(entry)
-              if (entry.isNativeArch) {
-                nativeArchMatrix.push(entry)
-              }
             }
-          }
-          await setOutput('value', JSON.stringify(matrix))
-          await setOutput('nativeArch', JSON.stringify(nativeArchMatrix))
-          console.log('Matrix:')
-          console.log(JSON.stringify(matrix, null, 2))
-          EOF
-        env:
-          inputs: ${{ toJSON(inputs) }}
-          arch: ${{ runner.arch }}
+            setOutput('value', JSON.stringify(matrix))
+            setOutput('nativeArch', JSON.stringify(nativeArchMatrix))
+            console.log('Matrix:')
+            console.log(JSON.stringify(matrix, null, 2))

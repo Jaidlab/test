@@ -12,7 +12,7 @@ jobs:
       - name: prepare
         id: prepare
         shell: bash
-        run: |
+        run: |-
           printf 'homeFolder=%s\n' "$(realpath ~)" >> $GITHUB_OUTPUT
           printf 'cwdFolder=%s\n' "$(realpath .)" >> $GITHUB_OUTPUT
           printf 'cwdParentFolder=%s\n' "$(realpath ..)" >> $GITHUB_OUTPUT
@@ -20,79 +20,77 @@ jobs:
           printf 'tempFolder=%s\n' "$(realpath "$RUNNER_TEMP")" >> $GITHUB_OUTPUT
       - name: checkout
         uses: actions/checkout@v6.0.2
-      - name: setupBun
-        uses: oven-sh/setup-bun@v2.2.0
       - name: installPackages
         uses: awalsh128/cache-apt-pkgs-action@v1.6.0
         with:
           packages: jq
       - name: users
         shell: bash
-        run: |
+        run: |-
           set -o xtrace
           cat /etc/passwd
       - name: groups
         shell: bash
-        run: |
+        run: |-
           set -o xtrace
           cat /etc/group
       - name: whoami
         shell: bash
-        run: |
+        run: |-
           set -o xtrace
           whoami
       - name: myGroups
         shell: bash
-        run: |
+        run: |-
           set -o xtrace
           groups
       - name: dumpContext (strategy)
         shell: bash
         env:
           object: ${{ toJson(strategy) }}
-        run: |
+        run: |-
           set -o xtrace
           jq --indent 2 --color-output . <<< "$object"
       - name: dumpContext (matrix)
         shell: bash
         env:
           object: ${{ toJson(env) }}
-        run: |
+        run: |-
           set -o xtrace
           jq --indent 2 --color-output . <<< "$object"
       - name: dumpContext (vars)
         shell: bash
         env:
           object: ${{ toJson(vars) }}
-        run: |
+        run: |-
           set -o xtrace
           jq --indent 2 --color-output . <<< "$object"
       - name: dumpContext (github)
         shell: bash
         env:
           object: ${{ toJson(github) }}
-        run: |
+        run: |-
           set -o xtrace
           jq --indent 2 --color-output . <<< "$object"
       - name: dumpContext (job)
         shell: bash
         env:
           object: ${{ toJson(job) }}
-        run: |
+        run: |-
           set -o xtrace
           jq --indent 2 --color-output . <<< "$object"
       - name: dumpContext (steps)
         shell: bash
         env:
           object: ${{ toJson(steps) }}
-        run: |
+        run: |-
           set -o xtrace
           jq --indent 2 --color-output . <<< "$object"
       - name: dumpContext (runner)
         shell: bash
         env:
           object: ${{ toJson(runner) }}
-        run: |
+        run: |-
           set -o xtrace
           jq --indent 2 --color-output . <<< "$object"
       - id: bunTest
@@ -103,40 +101,14 @@ jobs:
             console.log('test')
       - id: actionsGithubContext
         name: '@actions/github context'
-        run: |-
-          bun run - <<'EOF'
-          const payloadPath = process.env.GITHUB_EVENT_PATH
-          if (!payloadPath) {
-            throw new Error('Missing required environment variable “GITHUB_EVENT_PATH”.')
-          }
-          const payload = JSON.parse(await Bun.file(payloadPath).text()) as Record<string, unknown>
-          const [owner = '', repo = ''] = (process.env.GITHUB_REPOSITORY ?? '').split('/')
-          const context = {
-            payload,
-            eventName: process.env.GITHUB_EVENT_NAME,
-            sha: process.env.GITHUB_SHA,
-            ref: process.env.GITHUB_REF,
-            workflow: process.env.GITHUB_WORKFLOW,
-            action: process.env.GITHUB_ACTION,
-            actor: process.env.GITHUB_ACTOR,
-            job: process.env.GITHUB_JOB,
-            runAttempt: process.env.GITHUB_RUN_ATTEMPT ? Number(process.env.GITHUB_RUN_ATTEMPT) : undefined,
-            runNumber: process.env.GITHUB_RUN_NUMBER ? Number(process.env.GITHUB_RUN_NUMBER) : undefined,
-            runId: process.env.GITHUB_RUN_ID ? Number(process.env.GITHUB_RUN_ID) : undefined,
-            apiUrl: process.env.GITHUB_API_URL,
-            serverUrl: process.env.GITHUB_SERVER_URL,
-            graphqlUrl: process.env.GITHUB_GRAPHQL_URL,
-            repo: {
-              owner,
-              repo,
-            },
-          }
-          console.log('context as json')
-          console.log(JSON.stringify(context, null, 2))
-          EOF
+        uses: jaidlab/action-run-typescript@main
+        with:
+          code: |-
+            console.log('context as json')
+            console.log(JSON.stringify(github, null, 2))
       - name: env
         shell: bash
-        run: |
+        run: |-
           styleBlue=$(TERM=xterm-256color tput setaf 6)
           styleOrange=$(TERM=xterm-256color tput setaf 172)
           styleReset=$(TERM=xterm-256color tput sgr0)
@@ -150,7 +122,7 @@ jobs:
         shell: bash
         env:
           TERM: xterm-256color
-        run: |
+        run: |-
           styleBlue=$(tput setaf 6)
           styleOrange=$(tput setaf 172)
           styleReset=$(tput sgr0)
@@ -168,7 +140,7 @@ jobs:
         shell: bash
         env:
           TERM: xterm-256color
-        run: |
+        run: |-
           styleBlue=$(tput setaf 6)
           styleOrange=$(tput setaf 172)
           styleReset=$(tput sgr0)
@@ -181,7 +153,7 @@ jobs:
         shell: bash
         env:
           TERM: xterm-256color
-        run: |
+        run: |-
           styleBlue=$(tput setaf 6)
           styleOrange=$(tput setaf 172)
           styleReset=$(tput sgr0)
@@ -194,7 +166,7 @@ jobs:
         shell: bash
         env:
           TERM: xterm-256color
-        run: |
+        run: |-
           styleBlue=$(tput setaf 6)
           styleOrange=$(tput setaf 172)
           styleReset=$(tput sgr0)
@@ -207,7 +179,7 @@ jobs:
         shell: bash
         env:
           TERM: xterm-256color
-        run: |
+        run: |-
           styleBlue=$(tput setaf 6)
           styleOrange=$(tput setaf 172)
           styleReset=$(tput sgr0)
@@ -239,7 +211,7 @@ jobs:
           TERM: xterm-256color
           target: ${{ steps.prepare.outputs.homeFolder }}
         working-directory: ${{ steps.prepare.outputs.homeFolder }}
-        run: |
+        run: |-
           set -o xtrace
           du --apparent-size --summarize --bytes "$target"
           ls -l --almost-all --color=always --si --literal --group-directories-first
@@ -251,7 +223,7 @@ jobs:
           TERM: xterm-256color
           target: ${{ steps.prepare.outputs.cwdFolder }}
         working-directory: ${{ steps.prepare.outputs.cwdFolder }}
-        run: |
+        run: |-
           set -o xtrace
           du --apparent-size --summarize --bytes "$target"
           ls -l --almost-all --color=always --si --literal --group-directories-first
@@ -263,7 +235,7 @@ jobs:
           TERM: xterm-256color
           target: ${{ steps.prepare.outputs.cwdParentFolder }}
         working-directory: ${{ steps.prepare.outputs.cwdParentFolder }}
-        run: |
+        run: |-
           set -o xtrace
           du --apparent-size --summarize --bytes "$target"
           ls -l --almost-all --color=always --si --literal --group-directories-first
@@ -275,7 +247,7 @@ jobs:
           TERM: xterm-256color
           target: ${{ steps.prepare.outputs.workspaceFolder }}
         working-directory: ${{ steps.prepare.outputs.workspaceFolder }}
-        run: |
+        run: |-
           set -o xtrace
           du --apparent-size --summarize --bytes "$target"
           ls -l --almost-all --color=always --si --literal --group-directories-first
@@ -287,7 +259,7 @@ jobs:
           TERM: xterm-256color
           target: ${{ steps.prepare.outputs.tempFolder }}
         working-directory: ${{ steps.prepare.outputs.tempFolder }}
-        run: |
+        run: |-
           set -o xtrace
           du --apparent-size --summarize --bytes "$target"
           ls -l --almost-all --color=always --si --literal --group-directories-first

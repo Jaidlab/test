@@ -98,75 +98,63 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v6.0.2
-      - name: setupBun
-        uses: oven-sh/setup-bun@v2.2.0
       - id: getInputs
         name: getInputs
-        env:
-          inputs: ${{ toJSON(inputs) }}
-          github: ${{ toJSON(github) }}
-        run: |-
-          bun run - <<'EOF'
-          import {appendFile} from 'node:fs/promises'
-          import path from 'node:path'
-
-          function parseRequiredJsonEnv<Output>(name: string) {
-            const value = process.env[name]
-            if (value == null) {
-              throw new Error(`Missing required environment variable “${name}”.`)
+        uses: jaidlab/action-run-typescript@main
+        with:
+          globals: |-
+            {
+              github: ${{ toJSON(github) }},
+              inputs: ${{ toJSON(inputs) }},
             }
-            return JSON.parse(value) as Output
-          }
+          code: |-
+            import path from 'node:path'
 
-          const setOutput = async (name: string, value: unknown) => {
-            const rendered = String(value)
-            const delimiter = `output_${Math.random().toString(36).slice(2)}`
-            await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
-            console.log(`Output ${name}: ${rendered}`)
-          }
+            const setOutput = (name: string, value: unknown) => {
+              const rendered = String(value)
+              core.setOutput(name, rendered)
+              console.log(`Output ${name}: ${rendered}`)
+            }
 
-          const inputs = parseRequiredJsonEnv<Record<string, string>>('inputs')
-          const github = parseRequiredJsonEnv<Record<string, string>>('github')
-          const outputs: Record<string, string> = {
-            ...inputs,
-          }
-          if (!outputs.id) {
-            outputs.id = 'default'
-          }
-          if (!outputs.cacheKey) {
-            outputs.cacheKey = `${github.repository}|${github.workflow}|${github.ref_name}|${outputs.id}`.replaceAll(/[ ,/_|]+/g, '_').replaceAll('\\', '_')
-          }
-          if (!outputs.cacheFrom) {
-            outputs.cacheFrom = `type=gha,scope=${outputs.cacheKey}`
-          }
-          if (!outputs.cacheTo) {
-            outputs.cacheTo = `${outputs.cacheFrom},mode=max`
-          }
-          outputs.cacheHint = outputs.cacheTo
-            .replace('mode=max', '')
-            .replace(/^,+/, '')
-            .replace(/,+$/, '')
-            .replaceAll(/,+/g, ',')
-          if (!outputs.imageArtifact) {
-            outputs.imageArtifact = `${github.run_id}_${outputs.id}`
-          }
-          if (!outputs.imageFile) {
-            outputs.imageFile = `${outputs.imageName}.tar`
-          }
-          if (!outputs.imageFolder) {
-            outputs.imageFolder = `/tmp/dockerBuild/${github.run_id}_${outputs.id}`
-          }
-          if (!outputs.imagePath) {
-            outputs.imagePath = path.posix.resolve(outputs.imageFolder, outputs.imageFile)
-          }
-          if (!outputs.imageIdentifier) {
-            outputs.imageIdentifier = `${outputs.imageName}:${outputs.tag}`
-          }
-          for (const [key, value] of Object.entries(outputs)) {
-            await setOutput(key, value)
-          }
-          await setOutput('value', JSON.stringify(outputs))
-          EOF
+            const outputs: Record<string, string> = {
+              ...inputs,
+            }
+            if (!outputs.id) {
+              outputs.id = 'default'
+            }
+            if (!outputs.cacheKey) {
+              outputs.cacheKey = `${github.repository}|${github.workflow}|${github.ref_name}|${outputs.id}`.replaceAll(/[ ,/_|]+/g, '_').replaceAll('\\', '_')
+            }
+            if (!outputs.cacheFrom) {
+              outputs.cacheFrom = `type=gha,scope=${outputs.cacheKey}`
+            }
+            if (!outputs.cacheTo) {
+              outputs.cacheTo = `${outputs.cacheFrom},mode=max`
+            }
+            outputs.cacheHint = outputs.cacheTo
+              .replace('mode=max', '')
+              .replace(/^,+/, '')
+              .replace(/,+$/, '')
+              .replaceAll(/,+/g, ',')
+            if (!outputs.imageArtifact) {
+              outputs.imageArtifact = `${github.run_id}_${outputs.id}`
+            }
+            if (!outputs.imageFile) {
+              outputs.imageFile = `${outputs.imageName}.tar`
+            }
+            if (!outputs.imageFolder) {
+              outputs.imageFolder = `/tmp/dockerBuild/${github.run_id}_${outputs.id}`
+            }
+            if (!outputs.imagePath) {
+              outputs.imagePath = path.posix.resolve(outputs.imageFolder, outputs.imageFile)
+            }
+            if (!outputs.imageIdentifier) {
+              outputs.imageIdentifier = `${outputs.imageName}:${outputs.tag}`
+            }
+            for (const [key, value] of Object.entries(outputs)) {
+              setOutput(key, value)
+            }
+            setOutput('value', JSON.stringify(outputs))
       - name: setupQemu
         if: ${{ steps.getInputs.outputs.arch != 'linux/amd64' }}
         uses: docker/setup-qemu-action@v4.0.0
@@ -202,5 +190,5 @@ jobs:
         shell: bash
         env:
           imageFolder: ${{ steps.getInputs.outputs.imageFolder }}
-        run: |
+        run: |-
           ls -l --almost-all --block-size 1 --color=always "$imageFolder"

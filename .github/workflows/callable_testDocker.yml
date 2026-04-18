@@ -51,50 +51,38 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v6.0.2
-      - name: setupBun
-        uses: oven-sh/setup-bun@v2.2.0
       - id: getInputs
-        run: |-
-          bun run - <<'EOF'
-          import {appendFile} from 'node:fs/promises'
-
-          function parseRequiredJsonEnv<Output>(name: string) {
-            const value = process.env[name]
-            if (value == null) {
-              throw new Error(`Missing required environment variable “${name}”.`)
+        name: getInputs
+        uses: jaidlab/action-run-typescript@main
+        with:
+          globals: |-
+            {
+              github: ${{ toJSON(github) }},
+              inputs: ${{ toJSON(inputs) }},
             }
-            return JSON.parse(value) as Output
-          }
+          code: |-
+            const setOutput = (name: string, value: unknown) => {
+              const rendered = String(value)
+              core.setOutput(name, rendered)
+              console.log(`Output ${name}: ${rendered}`)
+            }
 
-          const setOutput = async (name: string, value: unknown) => {
-            const rendered = String(value)
-            const delimiter = `output_${Math.random().toString(36).slice(2)}`
-            await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
-            console.log(`Output ${name}: ${rendered}`)
-          }
-
-          const inputs = parseRequiredJsonEnv<Record<string, string>>('inputs')
-          const github = parseRequiredJsonEnv<Record<string, string>>('github')
-          const outputs: Record<string, string> = {
-            ...inputs,
-          }
-          if (!outputs.id) {
-            outputs.id = 'default'
-          }
-          if (!outputs.imageArtifact) {
-            outputs.imageArtifact = `${github.run_id}_${outputs.id}`
-          }
-          if (!outputs.imageFolder) {
-            outputs.imageFolder = `/tmp/dockerBuild/${github.run_id}_${outputs.id}`
-          }
-          for (const [key, value] of Object.entries(outputs)) {
-            await setOutput(key, value)
-          }
-          await setOutput('value', JSON.stringify(outputs))
-          EOF
-        env:
-          inputs: ${{ toJSON(inputs) }}
-          github: ${{ toJSON(github) }}
+            const outputs: Record<string, string> = {
+              ...inputs,
+            }
+            if (!outputs.id) {
+              outputs.id = 'default'
+            }
+            if (!outputs.imageArtifact) {
+              outputs.imageArtifact = `${github.run_id}_${outputs.id}`
+            }
+            if (!outputs.imageFolder) {
+              outputs.imageFolder = `/tmp/dockerBuild/${github.run_id}_${outputs.id}`
+            }
+            for (const [key, value] of Object.entries(outputs)) {
+              setOutput(key, value)
+            }
+            setOutput('value', JSON.stringify(outputs))
       - name: loadArtifact
         uses: actions/download-artifact@v8.0.1
         with:
@@ -105,7 +93,7 @@ jobs:
         env:
           imageFolder: ${{ steps.getInputs.outputs.imageFolder }}
           imageFile: ${{ steps.getInputs.outputs.imageFile }}
-        run: |
+        run: |-
             docker load --input "$imageFolder/$imageFile"
       - name: setupQemu
         if: ${{ steps.getInputs.outputs.arch != 'linux/amd64' }}
@@ -114,179 +102,198 @@ jobs:
           platforms: ${{ steps.getInputs.outputs.arch }}
       - id: runImage
         name: runImage
-        run: |-
-          bun run - <<'EOF'
-          import * as fs from 'node:fs'
-          import * as fsPromises from 'node:fs/promises'
-          import {runInNewContext} from 'node:vm'
-
-          type Inputs = {
-            appArgs?: string
-            arch?: string
-            dockerRunArgs?: string
-            imageIdentifier: string
-            testEval?: string
-          }
-
-          function parseRequiredJsonEnv<Output>(name: string) {
-            const value = process.env[name]
-            if (value == null) {
-              throw new Error(`Missing required environment variable “${name}”.`)
+        uses: jaidlab/action-run-typescript@main
+        with:
+          globals: |-
+            {
+              inputs: ${{ steps.getInputs.outputs.value }},
             }
-            return JSON.parse(value) as Output
-          }
+          code: |-
+            import {spawn} from 'node:child_process'
+            import * as fs from 'node:fs'
+            import * as fsPromises from 'node:fs/promises'
+            import {runInNewContext} from 'node:vm'
 
-          const splitShellWords = (input: string) => {
-            const result: string[] = []
-            let current = ''
-            let quote: 'double' | 'single' | undefined
-            let tokenStarted = false
-            for (let index = 0; index < input.length; index++) {
-              const character = input[index]!
-              if (quote === 'single') {
-                if (character === "'") {
-                  quote = undefined
-                } else {
-                  current += character
+            type Inputs = {
+              appArgs?: string
+              arch?: string
+              dockerRunArgs?: string
+              imageIdentifier: string
+              testEval?: string
+            }
+
+            const splitShellWords = (input: string) => {
+              const result: string[] = []
+              let current = ''
+              let quote: 'double' | 'single' | undefined
+              let tokenStarted = false
+              for (let index = 0; index < input.length; index++) {
+                const character = input[index]!
+                if (quote === 'single') {
+                  if (character === "'") {
+                    quote = undefined
+                  } else {
+                    current += character
+                  }
+                  continue
                 }
-                continue
-              }
-              if (quote === 'double') {
+                if (quote === 'double') {
+                  if (character === '"') {
+                    quote = undefined
+                    continue
+                  }
+                  if (character === '\\') {
+                    index += 1
+                    const nextCharacter = input[index]
+                    if (nextCharacter == null) {
+                      throw new Error('Dangling escape sequence in double-quoted argument string.')
+                    }
+                    current += nextCharacter
+                    continue
+                  }
+                  current += character
+                  continue
+                }
+                if (/\s/.test(character)) {
+                  if (tokenStarted) {
+                    result.push(current)
+                    current = ''
+                    tokenStarted = false
+                  }
+                  continue
+                }
+                if (character === "'") {
+                  quote = 'single'
+                  tokenStarted = true
+                  continue
+                }
                 if (character === '"') {
-                  quote = undefined
+                  quote = 'double'
+                  tokenStarted = true
                   continue
                 }
                 if (character === '\\') {
-                  index++
+                  index += 1
                   const nextCharacter = input[index]
                   if (nextCharacter == null) {
-                    throw new Error('Dangling escape sequence in double-quoted argument string.')
+                    throw new Error('Dangling escape sequence in argument string.')
                   }
                   current += nextCharacter
+                  tokenStarted = true
                   continue
                 }
                 current += character
-                continue
-              }
-              if (/\s/.test(character)) {
-                if (tokenStarted) {
-                  result.push(current)
-                  current = ''
-                  tokenStarted = false
-                }
-                continue
-              }
-              if (character === "'") {
-                quote = 'single'
                 tokenStarted = true
-                continue
               }
-              if (character === '"') {
-                quote = 'double'
-                tokenStarted = true
-                continue
+              if (quote) {
+                throw new Error('Unterminated quoted argument string.')
               }
-              if (character === '\\') {
-                index++
-                const nextCharacter = input[index]
-                if (nextCharacter == null) {
-                  throw new Error('Dangling escape sequence in argument string.')
-                }
-                current += nextCharacter
-                tokenStarted = true
-                continue
+              if (tokenStarted) {
+                result.push(current)
               }
-              current += character
-              tokenStarted = true
+              return result
             }
-            if (quote) {
-              throw new Error('Unterminated quoted argument string.')
-            }
-            if (tokenStarted) {
-              result.push(current)
-            }
-            return result
-          }
 
-          const stripFinalNewline = (value: string) => value.replace(/\r?\n$/, '')
-          function runInSandbox<Output>(code: string, sandbox: Record<string, unknown>, timeout = 60_000) {
-            return runInNewContext(code, sandbox, {timeout}) as Output
-          }
-
-          const inputs = parseRequiredJsonEnv<Inputs>('inputs')
-          const args = ['run', '--rm']
-          if (inputs.dockerRunArgs) {
-            args.push(...splitShellWords(inputs.dockerRunArgs))
-          }
-          if (inputs.arch && inputs.arch !== 'linux/amd64') {
-            args.push('--platform', inputs.arch)
-          }
-          args.push(inputs.imageIdentifier)
-          if (inputs.appArgs) {
-            args.push(...splitShellWords(inputs.appArgs))
-          }
-          const command = ['docker', ...args]
-          console.log(`$ ${command.join(' ')}`)
-          const subprocess = Bun.spawn({
-            cmd: command,
-            stdout: 'pipe',
-            stderr: 'pipe',
-          })
-          const [stdoutRaw, stderrRaw, exitCode] = await Promise.all([
-            new Response(subprocess.stdout).text(),
-            new Response(subprocess.stderr).text(),
-            subprocess.exited,
-          ])
-          const stdout = stripFinalNewline(stdoutRaw)
-          const stderr = stripFinalNewline(stderrRaw)
-          const executionResult = {
-            all: [stdout, stderr].filter(part => part.length > 0).join('\n'),
-            command: command.join(' '),
-            cwd: process.cwd(),
-            exitCode,
-            failed: exitCode !== 0,
-            stderr,
-            stdout,
-          }
-          if (executionResult.failed) {
-            console.dir(executionResult, {depth: null})
-            throw new Error(`Docker exited with status ${exitCode}`)
-          }
-          const fsExtraLike = {
-            ...fs,
-            pathExists: async (file: string) => {
-              try {
-                await fsPromises.access(file)
-                return true
-              } catch {
-                return false
+            const stripFinalNewline = (value: string) => value.replace(/\r?\n$/, '')
+            const readStream = (stream: NodeJS.ReadableStream | null) => new Promise<string>((resolve, reject) => {
+              if (!stream) {
+                resolve('')
+                return
               }
-            },
-            pathExistsSync: (file: string) => fs.existsSync(file),
-            promises: fsPromises,
-            readJSON: async (file: string) => JSON.parse(await fsPromises.readFile(file, 'utf8')),
-            readJSONSync: (file: string) => JSON.parse(fs.readFileSync(file, 'utf8')),
-            readJson: async (file: string) => JSON.parse(await fsPromises.readFile(file, 'utf8')),
-            readJsonSync: (file: string) => JSON.parse(fs.readFileSync(file, 'utf8')),
-          }
-          const sandboxGlobals = {
-            executionResult,
-            fs: fsExtraLike,
-            inputs,
-            result: executionResult,
-            status: executionResult.exitCode,
-            stderr: executionResult.stderr,
-            stdout: executionResult.stdout,
-          }
-          console.dir(sandboxGlobals, {depth: null})
-          if (inputs.testEval) {
-            console.log(`Running validation expression: ${inputs.testEval}`)
-            const validation = runInSandbox(inputs.testEval, sandboxGlobals)
-            console.log(`Validation expression returned: ${validation}`)
-            if (!validation) {
-              throw new Error(`Validation expression returned ${validation}`)
+              const chunks: Buffer[] = []
+              stream.on('data', chunk => {
+                chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+              })
+              stream.on('error', reject)
+              stream.on('end', () => {
+                resolve(Buffer.concat(chunks).toString('utf8'))
+              })
+            })
+            const waitForSubprocess = (subprocess: ReturnType<typeof spawn>) => new Promise<{exitCode: number | null, signal: NodeJS.Signals | null}>((resolve, reject) => {
+              subprocess.once('error', reject)
+              subprocess.once('close', (exitCode, signal) => {
+                resolve({
+                  exitCode,
+                  signal,
+                })
+              })
+            })
+            function runInSandbox<Output>(code: string, sandbox: Record<string, unknown>, timeout = 60_000) {
+              return runInNewContext(code, sandbox, {timeout}) as Output
             }
-          }
-          EOF
-        env:
-          inputs: ${{ steps.getInputs.outputs.value }}
+
+            const args = ['run', '--rm']
+            if (inputs.dockerRunArgs) {
+              args.push(...splitShellWords(inputs.dockerRunArgs))
+            }
+            if (inputs.arch && inputs.arch !== 'linux/amd64') {
+              args.push('--platform', inputs.arch)
+            }
+            args.push(inputs.imageIdentifier)
+            if (inputs.appArgs) {
+              args.push(...splitShellWords(inputs.appArgs))
+            }
+            const command = ['docker', ...args]
+            console.log(`$ ${command.join(' ')}`)
+            const subprocess = spawn(command[0]!, command.slice(1), {
+              stdio: ['ignore', 'pipe', 'pipe'],
+            })
+            const [stdoutRaw, stderrRaw, execution] = await Promise.all([
+              readStream(subprocess.stdout),
+              readStream(subprocess.stderr),
+              waitForSubprocess(subprocess),
+            ])
+            if (execution.signal) {
+              throw new Error(`Docker exited due to signal ${execution.signal}`)
+            }
+            const normalizedExitCode = execution.exitCode ?? 0
+            const stdout = stripFinalNewline(stdoutRaw)
+            const stderr = stripFinalNewline(stderrRaw)
+            const executionResult = {
+              all: [stdout, stderr].filter(part => part.length > 0).join('\n'),
+              command: command.join(' '),
+              cwd: process.cwd(),
+              exitCode: normalizedExitCode,
+              failed: normalizedExitCode !== 0,
+              stderr,
+              stdout,
+            }
+            if (executionResult.failed) {
+              console.dir(executionResult, {depth: null})
+              throw new Error(`Docker exited with status ${normalizedExitCode}`)
+            }
+            const fsExtraLike = {
+              ...fs,
+              pathExists: async (file: string) => {
+                try {
+                  await fsPromises.access(file)
+                  return true
+                } catch {
+                  return false
+                }
+              },
+              pathExistsSync: (file: string) => fs.existsSync(file),
+              promises: fsPromises,
+              readJSON: async (file: string) => JSON.parse(await fsPromises.readFile(file, 'utf8')),
+              readJSONSync: (file: string) => JSON.parse(fs.readFileSync(file, 'utf8')),
+              readJson: async (file: string) => JSON.parse(await fsPromises.readFile(file, 'utf8')),
+              readJsonSync: (file: string) => JSON.parse(fs.readFileSync(file, 'utf8')),
+            }
+            const sandboxGlobals = {
+              executionResult,
+              fs: fsExtraLike,
+              inputs,
+              result: executionResult,
+              status: executionResult.exitCode,
+              stderr: executionResult.stderr,
+              stdout: executionResult.stdout,
+            }
+            console.dir(sandboxGlobals, {depth: null})
+            if (inputs.testEval) {
+              console.log(`Running validation expression: ${inputs.testEval}`)
+              const validation = runInSandbox(inputs.testEval, sandboxGlobals)
+              console.log(`Validation expression returned: ${validation}`)
+              if (!validation) {
+                throw new Error(`Validation expression returned ${validation}`)
+              }
+            }
