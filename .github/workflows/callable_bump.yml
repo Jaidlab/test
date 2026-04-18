@@ -106,6 +106,10 @@ jobs:
             } else {
               await writeFile(process.env.GITHUB_STEP_SUMMARY!, `[${newTag}](${github.event.repository.html_url}/releases/tag/${newTag})`)
             }
+          globals: |-
+            {
+              steps: ${{ toJson(steps) }},
+            }
       - name: getReleaseTexts
         id: getReleaseTexts
         shell: bash

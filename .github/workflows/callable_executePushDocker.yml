@@ -47,11 +47,6 @@ jobs:
         name: getInputs
         uses: jaidlab/action-run-typescript@main
         with:
-          globals: |-
-            {
-              github: ${{ toJson(github) }},
-              inputs: ${{ toJson(inputs) }},
-            }
           code: |-
             import {appendFile} from 'node:fs/promises'
 
@@ -143,6 +138,11 @@ jobs:
               await setOutput(key, outputs[key])
             }
             await setOutput('value', JSON.stringify(outputs))
+          globals: |-
+            {
+              github: ${{ toJson(github) }},
+              inputs: ${{ toJson(inputs) }},
+            }
   build:
     name: build${{ fromJson(needs.getInputs.outputs.value).nameSuffix }}
     needs: getInputs
