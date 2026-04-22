@@ -80,10 +80,10 @@ jobs:
         id: extractSemvers
         uses: jaidlab/action-run-typescript@main
         with:
-          globals: |-
-            {
-              steps: ${{ toJson(steps) }}
-            }
+          # globals: |-
+          #   {
+          #     steps: ${{ toJson(steps) }}
+          #   }
           code: |-
             import {appendFile, writeFile} from 'node:fs/promises'
 
