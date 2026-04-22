@@ -83,7 +83,9 @@ jobs:
           code: |-
             import {appendFile, writeFile} from 'node:fs/promises'
             process.env.FORCE_COLOR = '3'
-            console.dir(globalThis.steps.$bySlug)
+            console.dir(globalThis.steps.$bySlug, {
+              depth: 3
+            })
             await new Promise(resolve => setTimeout(resolve, 1000)) // wait a moment for the outputs to be available
 
             const setOutput = async (name: string, value: unknown) => {
