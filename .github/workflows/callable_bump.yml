@@ -84,7 +84,7 @@ jobs:
             import {appendFile, writeFile} from 'node:fs/promises'
             process.env.FORCE_COLOR = '3'
             console.dir(globalThis, {
-              depth: 3
+              depth: 4
             })
             await new Promise(resolve => setTimeout(resolve, 1000)) // wait a moment for the outputs to be available
 
