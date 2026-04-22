@@ -86,8 +86,8 @@ jobs:
           #   }
           code: |-
             import {appendFile, writeFile} from 'node:fs/promises'
-
-            console.dir(github)
+            process.env.FORCE_COLOR = '3'
+            console.dir(globalThis)
 
             const setOutput = async (name: string, value: unknown) => {
               const rendered = String(value)
