@@ -102,20 +102,18 @@ jobs:
         name: getInputs
         uses: jaidlab/action-run-typescript@main
         with:
-          globals: |-
-            {
-              github: ${{ toJSON(github) }},
-              inputs: ${{ toJSON(inputs) }},
-            }
+          globals: '{inputs: ${{ toJSON(inputs) }}}'
           code: |-
-            import {appendFile} from 'node:fs/promises'
             import path from 'node:path'
 
-            const setOutput = async (name: string, value: unknown) => {
-              const rendered = String(value)
-              const delimiter = `output_${Math.random().toString(36).slice(2)}`
-              await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
-              console.log(`Output ${name}: ${rendered}`)
+            const getRefName = (ref?: string) => {
+              if (!ref) {
+                return ''
+              }
+              return ref
+                .replace(/^refs\/heads\//, '')
+                .replace(/^refs\/tags\//, '')
+                .replace(/^refs\/pull\//, '')
             }
 
             const outputs: Record<string, string> = {
@@ -125,7 +123,8 @@ jobs:
               outputs.id = 'default'
             }
             if (!outputs.cacheKey) {
-              outputs.cacheKey = `${github.repository}|${github.workflow}|${github.ref_name}|${outputs.id}`.replaceAll(/[ ,/_|]+/g, '_').replaceAll('\\', '_')
+              const refName = github.ref_name || getRefName(github.ref)
+              outputs.cacheKey = `${github.repository}|${github.workflow}|${refName}|${outputs.id}`.replaceAll(/[ ,/_|]+/g, '_').replaceAll('\\', '_')
             }
             if (!outputs.cacheFrom) {
               outputs.cacheFrom = `type=gha,scope=${outputs.cacheKey}`
@@ -154,9 +153,9 @@ jobs:
               outputs.imageIdentifier = `${outputs.imageName}:${outputs.tag}`
             }
             for (const [key, value] of Object.entries(outputs)) {
-              await setOutput(key, value)
+              core.setOutput(key, value)
             }
-            await setOutput('value', JSON.stringify(outputs))
+            core.setOutput('value', JSON.stringify(outputs))
       - name: setupQemu
         if: ${{ steps.getInputs.outputs.arch != 'linux/amd64' }}
         uses: docker/setup-qemu-action@v4.0.0

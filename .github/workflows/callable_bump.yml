@@ -82,20 +82,6 @@ jobs:
         with:
           globals: '{steps: ${{ toJson(steps) }}}'
           code: |-
-            import {appendFile, writeFile} from 'node:fs/promises'
-            process.env.FORCE_COLOR = '3'
-            console.dir(globalThis, {
-              depth: 4
-            })
-            await new Promise(resolve => setTimeout(resolve, 1000)) // wait a moment for the outputs to be available
-
-            const setOutput = async (name: string, value: unknown) => {
-              const rendered = String(value)
-              const delimiter = `output_${Math.random().toString(36).slice(2)}`
-              await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
-              console.log(`Output ${name}: ${rendered}`)
-            }
-
             const extractSemver = (tag: string) => {
               return /(?<versionPrefix>v?)(?<version>\d+\.\d+\.\d+)/.exec(tag)?.groups
             }
@@ -106,29 +92,35 @@ jobs:
               newSemver,
               newTag,
             })
-            await setOutput('newSemver', newSemver?.version ?? '')
-            if (oldTag) {
-              await writeFile(process.env.GITHUB_STEP_SUMMARY!, `[${oldTag}](${github.event.repository.html_url}/releases/tag/${oldTag}) → [${newTag}](${github.event.repository.html_url}/releases/tag/${newTag})`)
-            } else {
-              await writeFile(process.env.GITHUB_STEP_SUMMARY!, `[${newTag}](${github.event.repository.html_url}/releases/tag/${newTag})`)
-            }
+            core.setOutput('newSemver', newSemver?.version ?? '')
+            const summary = oldTag
+              ? `[${oldTag}](${github.event.repository.html_url}/releases/tag/${oldTag}) → [${newTag}](${github.event.repository.html_url}/releases/tag/${newTag})`
+              : `[${newTag}](${github.event.repository.html_url}/releases/tag/${newTag})`
+            await core.summary.addRaw(summary).write()
       - name: getReleaseTexts
         id: getReleaseTexts
-        shell: bash
-        env:
-          oldTag: ${{ steps.createTag.outputs.old_tag }}
-          releaseTitle: ${{ format(inputs.releaseTitle, github.repository_owner, github.event.repository.name, steps.createTag.outputs.old_tag, steps.createTag.outputs.new_tag) }}
-          releaseBody: ${{ format(inputs.releaseBody, github.repository_owner, github.event.repository.name, steps.createTag.outputs.old_tag, steps.createTag.outputs.new_tag) }}
-          initialReleaseTitle: ${{ format(inputs.initialReleaseTitle, github.repository_owner, github.event.repository.name, steps.createTag.outputs.new_tag) }}
-          initialReleaseBody: ${{ format(inputs.initialReleaseBody, github.repository_owner, github.event.repository.name, steps.createTag.outputs.new_tag) }}
-        run: |-
-          if [[ -n $oldTag ]]; then
-            printf title=%s "$releaseTitle" > $GITHUB_OUTPUT
-            printf '\nbody=%s' "$releaseBody" >> $GITHUB_OUTPUT
-          else
-            printf title=%s "$initialReleaseTitle" > $GITHUB_OUTPUT
-            printf '\nbody=%s' "$initialReleaseBody" >> $GITHUB_OUTPUT
-          fi
+        uses: jaidlab/action-run-typescript@main
+        with:
+          globals: |-
+            {
+              inputs: ${{ toJson(inputs) }},
+              steps: ${{ toJson(steps) }}
+            }
+          code: |-
+            const formatString = (template: string, ...values: Array<string | undefined>) => {
+              return template.replaceAll(/\{(\d+)\}/g, (_, index) => values[Number(index)] ?? '')
+            }
+            const oldTag = steps.createTag.outputs.old_tag
+            const newTag = steps.createTag.outputs.new_tag
+            const repoOwner = github.repo?.owner ?? ''
+            const repoName = github.repo?.repo ?? ''
+            if (oldTag) {
+              core.setOutput('title', formatString(inputs.releaseTitle, repoOwner, repoName, oldTag, newTag))
+              core.setOutput('body', formatString(inputs.releaseBody, repoOwner, repoName, oldTag, newTag))
+            } else {
+              core.setOutput('title', formatString(inputs.initialReleaseTitle, repoOwner, repoName, newTag))
+              core.setOutput('body', formatString(inputs.initialReleaseBody, repoOwner, repoName, newTag))
+            }
       - name: updateRelease
         id: updateRelease
         uses: ncipollo/release-action@v1.21.0
@@ -142,20 +134,8 @@ jobs:
         id: prepareDispatch
         uses: jaidlab/action-run-typescript@main
         with:
-          globals: |-
-            {
-              steps: ${{ toJson(steps) }},
-            }
+          globals: '{steps: ${{ toJson(steps) }}}'
           code: |-
-            import {appendFile} from 'node:fs/promises'
-
-            const setOutput = async (name: string, value: unknown) => {
-              const rendered = String(value)
-              const delimiter = `output_${Math.random().toString(36).slice(2)}`
-              await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
-              console.log(`Output ${name}: ${rendered}`)
-            }
-
             const output = {
               newSemver: steps.extractSemvers.outputs.newSemver,
               newTag: steps.createTag.outputs.new_tag,
@@ -165,7 +145,7 @@ jobs:
               releaseTitle: steps.getReleaseTexts.outputs.title,
               releaseUrl: steps.updateRelease.outputs.html_url,
             }
-            await setOutput('value', JSON.stringify(output))
+            core.setOutput('value', JSON.stringify(output))
       - name: triggerDispatch
         id: triggerDispatch
         uses: peter-evans/repository-dispatch@v4.0.1

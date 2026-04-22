@@ -116,21 +116,21 @@ on:
         description: 'Create here with “Read, Write”: https://hub.docker.com/settings/security?generateToken=true'
     outputs:
       meta:
-        value: ${{ jobs.push.outputs.meta }}
+        value: ${{ jobs.invoke.outputs.meta }}
       digest:
-        value: ${{ jobs.push.outputs.digest }}
+        value: ${{ jobs.invoke.outputs.digest }}
       imageId:
-        value: ${{ jobs.push.outputs.imageId }}
+        value: ${{ jobs.invoke.outputs.imageId }}
       imageName:
-        value: ${{ jobs.push.outputs.imageName }}
+        value: ${{ jobs.invoke.outputs.imageName }}
       imageSlug:
-        value: ${{ jobs.push.outputs.imageSlug }}
+        value: ${{ jobs.invoke.outputs.imageSlug }}
       imageUser:
-        value: ${{ jobs.push.outputs.imageUser }}
+        value: ${{ jobs.invoke.outputs.imageUser }}
 jobs:
   makeMatrix:
     name: makeMatrix
-    uses: ./.github/workflows/makeDockerTagMatrix.yml
+    uses: ./.github/workflows/callable_makeDockerTagMatrix.yml
     with:
       bases: ${{ inputs.matrixBases }}
       platform: ${{ inputs.matrixPlatform }}
@@ -143,7 +143,7 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJson(needs.makeMatrix.outputs.output) }}
-    uses: ./.github/workflows/executePushDocker.yml
+    uses: ./.github/workflows/callable_executePushDocker.yml
     with:
       passedInputs: ${{ toJson(inputs) }}
       matrixEntry: ${{ toJson(matrix) }}

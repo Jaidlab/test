@@ -20,17 +20,17 @@ on:
         description: 'Create here with “Read, Write”: https://hub.docker.com/settings/security?generateToken=true'
     outputs:
       meta:
-        value: ${{ jobs.push.outputs.meta }}
+        value: ${{ jobs.upload.outputs.meta }}
       digest:
-        value: ${{ jobs.push.outputs.digest }}
+        value: ${{ jobs.upload.outputs.digest }}
       imageId:
-        value: ${{ jobs.push.outputs.imageId }}
+        value: ${{ jobs.upload.outputs.imageId }}
       imageName:
-        value: ${{ jobs.push.outputs.imageName }}
+        value: ${{ jobs.upload.outputs.imageName }}
       imageSlug:
-        value: ${{ jobs.push.outputs.imageSlug }}
+        value: ${{ jobs.upload.outputs.imageSlug }}
       imageUser:
-        value: ${{ jobs.push.outputs.imageUser }}
+        value: ${{ jobs.upload.outputs.imageUser }}
 run-name: invoke${{ inputs.nameSuffix }}
 jobs:
   getInputs:
@@ -47,16 +47,8 @@ jobs:
         name: getInputs
         uses: jaidlab/action-run-typescript@main
         with:
+          globals: '{inputs: ${{ toJson(inputs) }}}'
           code: |-
-            import {appendFile} from 'node:fs/promises'
-
-            const setOutput = async (name: string, value: unknown) => {
-              const rendered = String(value)
-              const delimiter = `output_${Math.random().toString(36).slice(2)}`
-              await appendFile(process.env.GITHUB_OUTPUT!, `${name}<<${delimiter}\n${rendered}\n${delimiter}\n`)
-              console.log(`Output ${name}: ${rendered}`)
-            }
-
             const getRepositoryFields = () => {
               const repository = github.repository
               if (!repository) {
@@ -112,6 +104,9 @@ jobs:
               outputs[camelCase(`matrix ${key}`)] = value
             }
             const {name: repositoryName, owner: repositoryOwner} = getRepositoryFields()
+            if (!outputs.matrixId) {
+              outputs.matrixId = 'default'
+            }
             if (!outputs.imageName) {
               outputs.imageName = preventStart(repositoryName.toLowerCase(), 'docker-')
             }
@@ -135,18 +130,13 @@ jobs:
               }
             }
             for (const key of Object.keys(outputs).sort((first, second) => first.localeCompare(second))) {
-              await setOutput(key, outputs[key])
+              core.setOutput(key, outputs[key])
             }
-            await setOutput('value', JSON.stringify(outputs))
-          globals: |-
-            {
-              github: ${{ toJson(github) }},
-              inputs: ${{ toJson(inputs) }},
-            }
+            core.setOutput('value', JSON.stringify(outputs))
   build:
     name: build${{ fromJson(needs.getInputs.outputs.value).nameSuffix }}
     needs: getInputs
-    uses: ./.github/workflows/buildDocker.yml
+    uses: ./.github/workflows/callable_buildDocker.yml
     with:
       id: ${{ fromJson(needs.getInputs.outputs.value).matrixId }}
       arch: ${{ fromJson(needs.getInputs.outputs.value).matrixPlatform }}
@@ -159,7 +149,7 @@ jobs:
     needs:
       - getInputs
       - build
-    uses: ./.github/workflows/testDocker.yml
+    uses: ./.github/workflows/callable_testDocker.yml
     with:
       id: ${{ fromJson(needs.getInputs.outputs.value).matrixId }}
       dockerRunArgs: ${{ fromJson(needs.getInputs.outputs.value).testDockerRunArgs }}
@@ -180,7 +170,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: ./.github/workflows/uploadDocker.yml
+    uses: ./.github/workflows/callable_uploadDocker.yml
     with:
       id: ${{ fromJson(needs.getInputs.outputs.value).matrixId }}
       dockerHubUser: ${{ fromJson(needs.getInputs.outputs.value).dockerHubUser }}
