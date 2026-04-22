@@ -99,8 +99,8 @@ jobs:
             const extractSemver = (tag: string) => {
               return /(?<versionPrefix>v?)(?<version>\d+\.\d+\.\d+)/.exec(tag)?.groups
             }
-            const oldTag = workflowJob.steps.createTag.outputs.old_tag
-            const newTag = workflowJob.steps.createTag.outputs.new_tag
+            const oldTag = steps.createTag.outputs.old_tag
+            const newTag = steps.createTag.outputs.new_tag
             const newSemver = extractSemver(newTag)
             console.dir({
               newSemver,
