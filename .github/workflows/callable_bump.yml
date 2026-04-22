@@ -88,6 +88,7 @@ jobs:
             import {appendFile, writeFile} from 'node:fs/promises'
             process.env.FORCE_COLOR = '3'
             console.dir(globalThis)
+            await new Promise(resolve => setTimeout(resolve, 1000)) // wait a moment for the outputs to be available
 
             const setOutput = async (name: string, value: unknown) => {
               const rendered = String(value)
