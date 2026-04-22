@@ -88,6 +88,7 @@ jobs:
             import {appendFile, writeFile} from 'node:fs/promises'
 
             console.dir(globalThis)
+            console.dir(github.steps.$bySlug)
             console.dir(workflowJob.steps)
 
             const setOutput = async (name: string, value: unknown) => {
