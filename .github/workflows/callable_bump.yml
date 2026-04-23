@@ -20,16 +20,16 @@ on:
         description: |-
           Handlebars template for release title
 
-          Available variables: repo.owner, repo.name, repo.slug, oldTag, newTag
+          Available variables: repo.owner, repo.name, repo.slug, repo.url, oldTag, newTag
       releaseBody:
         type: string
         required: false
         default: |-
-          {{#if oldTag}}[{{oldTag}}](https://github.com/{{repo.slug}}/tree/{{oldTag}}) [→](https://github.com/{{repo.slug}}/compare/{{oldTag}}...{{newTag}}) [{{newTag}}](https://github.com/{{repo.slug}}/tree/{{newTag}}){{else}}[{{newTag}}](https://github.com/{{repo.slug}}/tree/{{newTag}}){{/if}}
+          {{#if oldTag}}[{{oldTag}}]({{repo.url}}/tree/{{oldTag}}) [→]({{repo.url}}/compare/{{oldTag}}...{{newTag}}) [{{newTag}}]({{repo.url}}/tree/{{newTag}}){{else}}[{{newTag}}]({{repo.url}}/tree/{{newTag}}){{/if}}
         description: |-
           Handlebars template for release body
 
-          Available variables: repo.owner, repo.name, repo.slug, oldTag, newTag
+          Available variables: repo.owner, repo.name, repo.slug, repo.url, oldTag, newTag
       makeLatest:
         type: string
         required: false
@@ -122,14 +122,13 @@ jobs:
               name: github.repo?.repo ?? '',
               owner: github.repo?.owner ?? '',
             }
+            repo.slug = `${repo.owner}/${repo.name}`
+            repo.url = `https://github.com/${repo.slug}`
 
             const templateContext: templateContext = {
-              newTag: String(steps.createTag.outputs.new_tag || ''),
+              newTag: steps.createTag.outputs.new_tag || '',
               oldTag: steps.createTag.outputs.old_tag || undefined,
-              repo: {
-                ...repo,
-                slug: `${repo.owner}/${repo.name}`,
-              },
+              repo,
             }
 
             core.setOutput('title', renderHandlebars(inputs.releaseTitle, templateContext))
