@@ -109,30 +109,17 @@ jobs:
           dependencies: zeug
           code: |-
             import {renderHandlebars} from 'zeug'
-
-            type templateContext = {
-              newTag: string
-              oldTag?: string
-              repo: {
-                name: string
-                owner: string
-                slug: string
-              }
-            }
-
             const repo = {
               name: github.repo?.repo ?? '',
               owner: github.repo?.owner ?? '',
             }
             repo.slug = `${repo.owner}/${repo.name}`
             repo.url = `https://github.com/${repo.slug}`
-
             const templateContext: templateContext = {
               newTag: steps.createTag.outputs.new_tag || '',
               oldTag: steps.createTag.outputs.old_tag || undefined,
               repo,
             }
-
             core.setOutput('title', renderHandlebars(inputs.releaseTitle, templateContext))
             core.setOutput('body', renderHandlebars(inputs.releaseBody, templateContext))
       - name: updateRelease
