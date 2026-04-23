@@ -12,8 +12,6 @@ on:
           - minor
           - major
 jobs:
-  debug:
-    uses: jaidlab/test/.github/workflows/callable_debug.yml@main
   job:
     name: ${{ github.workflow }}
     permissions:
@@ -21,3 +19,6 @@ jobs:
     uses: jaidlab/test/.github/workflows/callable_bump.yml@main
     with:
       bumpAmount: ${{ inputs.bumpAmount }}
+  debug:
+    if: failure()
+    uses: jaidlab/test/.github/workflows/callable_debug.yml@main

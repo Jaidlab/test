@@ -106,7 +106,10 @@ jobs:
               inputs: ${{ toJson(inputs) }},
               steps: ${{ toJson(steps) }}
             }
+          dependencies: zeug
           code: |-
+            import {renderHandlebars} from 'zeug'
+            console.dir({renderHandlebars})
             const formatString = (template: string, ...values: Array<string | undefined>) => {
               return template.replaceAll(/\{(\d+)\}/g, (_, index) => values[Number(index)] ?? '')
             }
@@ -114,13 +117,20 @@ jobs:
             const newTag = steps.createTag.outputs.new_tag
             const repoOwner = github.repo?.owner ?? ''
             const repoName = github.repo?.repo ?? ''
-            if (oldTag) {
-              core.setOutput('title', formatString(inputs.releaseTitle, repoOwner, repoName, oldTag, newTag))
-              core.setOutput('body', formatString(inputs.releaseBody, repoOwner, repoName, oldTag, newTag))
-            } else {
-              core.setOutput('title', formatString(inputs.initialReleaseTitle, repoOwner, repoName, newTag))
-              core.setOutput('body', formatString(inputs.initialReleaseBody, repoOwner, repoName, newTag))
+            const getTitle = () => {
+              if (!oldTag) {
+                return formatString(inputs.initialReleaseTitle, repoOwner, repoName, newTag)
+              }
+              return formatString(inputs.releaseTitle, repoOwner, repoName, oldTag, newTag)
             }
+            const getBody = () => {
+              if (!oldTag) {
+                return formatString(inputs.initialReleaseBody, repoOwner, repoName, newTag)
+              }
+              return formatString(inputs.releaseBody, repoOwner, repoName, oldTag, newTag)
+            }
+            core.setOutput('title', getTitle())
+            core.setOutput('body', getBody())
       - name: updateRelease
         id: updateRelease
         uses: ncipollo/release-action@v1.21.0
