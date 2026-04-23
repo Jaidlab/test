@@ -128,7 +128,7 @@ jobs:
               oldTag: steps.createTag.outputs.old_tag || undefined,
               repo: {
                 ...repo,
-                slug: [repo.owner, repo.name].filter(part => part.length > 0).join('/'),
+                slug: `${repo.owner}/${repo.name}`,
               },
             }
 
