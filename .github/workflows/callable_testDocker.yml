@@ -45,7 +45,7 @@ on:
 jobs:
   test:
     name: test${{ inputs.nameSuffix }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
     steps:
