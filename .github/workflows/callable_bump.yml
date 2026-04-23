@@ -95,7 +95,7 @@ jobs:
             }
             core.summary.addRaw(getSummary())
             core.summary.addEOL()
-            core.summary.addCodeBlock(Bun.YAML.stringify({oldTag, newTag, newSemver}), 'yaml')
+            core.summary.addCodeBlock(Bun.YAML.stringify({oldTag, newTag, newSemver}, null, 2), 'yaml')
             await core.summary.write()
       - name: getReleaseTexts
         id: getReleaseTexts
