@@ -86,15 +86,17 @@ jobs:
             const oldTag = steps.createTag.outputs.old_tag
             const newTag = steps.createTag.outputs.new_tag
             const newSemver = extractSemver(newTag)
-            console.dir({
-              newSemver,
-              newTag,
-            })
             core.setOutput('newSemver', newSemver?.version ?? '')
-            const summary = oldTag
-              ? `[${oldTag}](${github.event.repository.html_url}/releases/tag/${oldTag}) → [${newTag}](${github.event.repository.html_url}/releases/tag/${newTag})`
-              : `[${newTag}](${github.event.repository.html_url}/releases/tag/${newTag})`
-            await core.summary.addRaw(summary).write()
+            const getSummary = () => {
+              if (!oldTag) {
+                return `[${newTag}](${github.event.repository.html_url}/releases/tag/${newTag})`
+              }
+              return `[${oldTag}](${github.event.repository.html_url}/releases/tag/${oldTag}) → [${newTag}](${github.event.repository.html_url}/releases/tag/${newTag})`
+            }
+            core.summary.addRaw(getSummary())
+            core.summary.addEOL()
+            core.summary.addCodeBlock(JSON.stringify({oldTag, newTag, newSemver}, null, 2))
+            await core.summary.write()
       - name: getReleaseTexts
         id: getReleaseTexts
         uses: jaidlab/action-run-typescript@main
