@@ -127,22 +127,9 @@ jobs:
         uses: jaidlab/action-run-typescript@main
         with:
           globals: '{inputs: ${{ toJSON(inputs) }}}'
+          dependencies: es-toolkit
           code: |-
-            const camelCase = (input: string) => {
-              return input
-                .replaceAll(/([a-z\d])([A-Z])/g, '$1 $2')
-                .split(/[^A-Za-z0-9]+/)
-                .filter(part => part.length > 0)
-                .map((part, index) => {
-                  const normalized = `${part[0]!.toUpperCase()}${part.slice(1)}`
-                  if (index === 0) {
-                    return `${part[0]!.toLowerCase()}${part.slice(1)}`
-                  }
-                  return normalized
-                })
-                .join('')
-            }
-
+            import {camelCase} from 'es-toolkit/string'
             const buildOutput = JSON.parse(String(inputs.buildOutput)) as Record<string, unknown>
             const outputs: Record<string, unknown> = {
               ...Object.fromEntries(Object.entries(inputs).filter(([key]) => key !== 'buildOutput')),
