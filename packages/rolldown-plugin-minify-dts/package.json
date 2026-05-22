@@ -1,0 +1,15 @@
+{
+  "name": "rolldown-plugin-minify-dts",
+  "version": "0.1.0",
+  "type": "module",
+  "funding": "https://github.com/sponsors/Jaid",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jaidlab/test.git"
+  },
+  "license": "MIT",
+  "main": "src/main.ts",
+  "scripts": {
+    "test": "bun test --max-concurrency 1 ./test"
+  }
+}
