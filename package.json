@@ -25,6 +25,7 @@
   "dependencies": {
     "bundil": "workspace:*",
     "rolldown-plugin-bundil": "workspace:*",
+    "rolldown-plugin-license": "workspace:*",
     "rolldown-plugin-minify": "workspace:*",
     "rolldown-plugin-minify-dts": "workspace:*",
     "rolldown-plugin-publishimo": "workspace:*"
