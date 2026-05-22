@@ -6,6 +6,10 @@
       "name": "test",
       "dependencies": {
         "bundil": "workspace:*",
+        "rolldown-plugin-bundil": "workspace:*",
+        "rolldown-plugin-minify": "workspace:*",
+        "rolldown-plugin-minify-dts": "workspace:*",
+        "rolldown-plugin-publishimo": "workspace:*",
       },
       "devDependencies": {
         "@rolldown/pluginutils": "^1.0.1",
@@ -21,6 +25,22 @@
     },
     "packages/bundil": {
       "name": "bundil",
+      "version": "0.1.0",
+    },
+    "packages/rolldown-plugin-bundil": {
+      "name": "rolldown-plugin-bundil",
+      "version": "0.1.0",
+    },
+    "packages/rolldown-plugin-minify": {
+      "name": "rolldown-plugin-minify",
+      "version": "0.1.0",
+    },
+    "packages/rolldown-plugin-minify-dts": {
+      "name": "rolldown-plugin-minify-dts",
+      "version": "0.1.0",
+    },
+    "packages/rolldown-plugin-publishimo": {
+      "name": "rolldown-plugin-publishimo",
       "version": "0.1.0",
     },
   },
@@ -405,7 +425,15 @@
 
     "rolldown": ["rolldown@1.0.2", "", { "dependencies": { "@oxc-project/types": "=0.132.0", "@rolldown/pluginutils": "^1.0.0" }, "optionalDependencies": { "@rolldown/binding-android-arm64": "1.0.2", "@rolldown/binding-darwin-arm64": "1.0.2", "@rolldown/binding-darwin-x64": "1.0.2", "@rolldown/binding-freebsd-x64": "1.0.2", "@rolldown/binding-linux-arm-gnueabihf": "1.0.2", "@rolldown/binding-linux-arm64-gnu": "1.0.2", "@rolldown/binding-linux-arm64-musl": "1.0.2", "@rolldown/binding-linux-ppc64-gnu": "1.0.2", "@rolldown/binding-linux-s390x-gnu": "1.0.2", "@rolldown/binding-linux-x64-gnu": "1.0.2", "@rolldown/binding-linux-x64-musl": "1.0.2", "@rolldown/binding-openharmony-arm64": "1.0.2", "@rolldown/binding-wasm32-wasi": "1.0.2", "@rolldown/binding-win32-arm64-msvc": "1.0.2", "@rolldown/binding-win32-x64-msvc": "1.0.2" }, "bin": { "rolldown": "./bin/cli.mjs" } }, "sha512-oZx5zVDtVB44AW3eaifgDml1gWRDZGvjcfdxonE4swNPG98PrrXjaO/KrnUjzlMnztCCRVlUueA1kCXhARGk6g=="],
 
+    "rolldown-plugin-bundil": ["rolldown-plugin-bundil@workspace:packages/rolldown-plugin-bundil"],
+
     "rolldown-plugin-dts": ["rolldown-plugin-dts@0.25.1", "", { "dependencies": { "@babel/generator": "8.0.0-rc.5", "@babel/helper-validator-identifier": "8.0.0-rc.5", "@babel/parser": "8.0.0-rc.4", "ast-kit": "^3.0.0-beta.1", "birpc": "^4.0.0", "dts-resolver": "^3.0.0", "get-tsconfig": "5.0.0-beta.5", "obug": "^2.1.1" }, "peerDependencies": { "@ts-macro/tsc": "^0.3.6", "@typescript/native-preview": ">=7.0.0-dev.20260325.1", "rolldown": "^1.0.0", "typescript": "^5.0.0 || ^6.0.0", "vue-tsc": "~3.2.0" }, "optionalPeers": ["@ts-macro/tsc", "@typescript/native-preview", "typescript", "vue-tsc"] }, "sha512-zK82aC/8z1iVW+g0bCnlQZq04Y5bNeL/RcRwTYBwsnU6wH0N+6vpIFkN7JC0kYRS5qKA+pxQyfIPvXJ6Q5xSpQ=="],
+
+    "rolldown-plugin-minify": ["rolldown-plugin-minify@workspace:packages/rolldown-plugin-minify"],
+
+    "rolldown-plugin-minify-dts": ["rolldown-plugin-minify-dts@workspace:packages/rolldown-plugin-minify-dts"],
+
+    "rolldown-plugin-publishimo": ["rolldown-plugin-publishimo@workspace:packages/rolldown-plugin-publishimo"],
 
     "rollup-plugin-stats": ["rollup-plugin-stats@2.1.2", "", { "peerDependencies": { "rolldown": "^1.0.0-beta.0", "rollup": "^3.0.0 || ^4.0.0", "vite": "^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0" }, "optionalPeers": ["rolldown", "rollup", "vite"] }, "sha512-xxeHvcpRheH8MungJfBIx71DSwU27nMVzUbImJt7uAt6jywRuNWwWYHpX8/jEg2Xg8LMazRuvXXpb2n6cn02Bw=="],
 
