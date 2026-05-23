@@ -251,7 +251,7 @@ const resolveDependencyPackageRoot = (cwd: string, packageName: string) => {
     const resolvedEntry = fs.realpathSync(requireFromCwd.resolve(packageName))
     return findPackageRoot(resolvedEntry)
   } catch {
-    return undefined
+
   }
 }
 const resolveRuntimePackageState = (cwd: string): RuntimePackageState => {

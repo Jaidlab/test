@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "bundil": "workspace:*",
-    "typescript": "^6.0.2"
+    "minify-dts": "workspace:*"
   },
   "peerDependencies": {
     "rolldown": "^1.0.0"
