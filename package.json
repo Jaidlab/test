@@ -25,13 +25,13 @@
   },
   "dependencies": {
     "bundil": "workspace:*",
+    "minify-dts": "workspace:*",
     "rolldown-plugin-bundil": "workspace:*",
     "rolldown-plugin-license": "workspace:*",
     "rolldown-plugin-minify": "workspace:*",
     "rolldown-plugin-minify-dts": "workspace:*",
     "rolldown-plugin-publishimo": "workspace:*",
-    "rolldown-plugin-readme": "workspace:*",
-    "eslint-config-minify-dts": "workspace:*"
+    "rolldown-plugin-readme": "workspace:*"
   },
   "devDependencies": {
     "@rolldown/pluginutils": "^1.0.1",
