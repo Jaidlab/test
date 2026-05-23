@@ -1,7 +1,6 @@
-import {Linter} from 'eslint'
-
 import stylistic from '@stylistic/eslint-plugin'
 import tsParser from '@typescript-eslint/parser'
+import {Linter} from 'eslint'
 
 const collapseSingleMemberBody = (context: any, bodyNode: any) => {
   const members = bodyNode.body ?? bodyNode.members
