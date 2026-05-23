@@ -1,0 +1,5 @@
+export {default as collapseExportBlockRule} from './collapse-export-block.ts'
+export {default as collapseSingleMemberRule} from './collapse-single-member.ts'
+export {default as normalizeCommentsRule} from './normalize-comments.ts'
+export {default as removeEmptyExportRule} from './remove-empty-export.ts'
+export {default as stripLineCommentsRule} from './strip-line-comments.ts'

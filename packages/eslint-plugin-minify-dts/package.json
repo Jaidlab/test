@@ -1,5 +1,5 @@
 {
-  "name": "minify-dts",
+  "name": "eslint-plugin-minify-dts",
   "version": "0.1.0",
   "type": "module",
   "funding": "https://github.com/sponsors/Jaid",
@@ -12,11 +12,7 @@
   "scripts": {
     "test": "bun test --max-concurrency 1 ./test"
   },
-  "dependencies": {
-    "@stylistic/eslint-plugin": "^5.10.0",
-    "eslint": "^10.4.0",
-    "eslint-plugin-minify-dts": "workspace:*",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.4"
+  "peerDependencies": {
+    "eslint": "^10.0.0"
   }
 }

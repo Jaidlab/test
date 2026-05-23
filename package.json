@@ -31,7 +31,8 @@
     "rolldown-plugin-minify": "workspace:*",
     "rolldown-plugin-minify-dts": "workspace:*",
     "rolldown-plugin-publishimo": "workspace:*",
-    "rolldown-plugin-readme": "workspace:*"
+    "rolldown-plugin-readme": "workspace:*",
+    "eslint-plugin-minify-dts": "workspace:*"
   },
   "devDependencies": {
     "@rolldown/pluginutils": "^1.0.1",
