@@ -3,13 +3,25 @@
   "version": "0.1.0",
   "type": "module",
   "funding": "https://github.com/sponsors/Jaid",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jaidlab/test.git"
   },
-  "license": "MIT",
   "main": "src/main.ts",
   "scripts": {
     "test": "bun test --max-concurrency 1 ./test"
+  },
+  "dependencies": {
+    "bundil": "workspace:*",
+    "rolldown-plugin-dts": "^0.25.1",
+    "rolldown-plugin-license": "workspace:*",
+    "rolldown-plugin-minify": "workspace:*",
+    "rolldown-plugin-minify-dts": "workspace:*",
+    "rolldown-plugin-publishimo": "workspace:*",
+    "rolldown-plugin-readme": "workspace:*"
+  },
+  "peerDependencies": {
+    "rolldown": "^1.0.0"
   }
 }

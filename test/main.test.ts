@@ -1,8 +1,7 @@
-import {expect, it} from 'bun:test'
+import {expect, test} from 'bun:test'
 
-import {getMainModuleDefault} from 'zeug'
+import testSubject from '../src/main.ts'
 
-const {default: test} = await import('#src/main.ts')
-it('should run', () => {
-  expect(test).toBe(1) // TODO Test actual functionality
+test('should run', () => {
+  expect(testSubject).toBe(1) // TODO Test actual functionality
 })

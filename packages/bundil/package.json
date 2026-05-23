@@ -3,13 +3,21 @@
   "version": "0.1.0",
   "type": "module",
   "funding": "https://github.com/sponsors/Jaid",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jaidlab/test.git"
   },
-  "license": "MIT",
   "main": "src/main.ts",
   "scripts": {
     "test": "bun test --max-concurrency 1 ./test"
+  },
+  "dependencies": {
+    "fs-extra": "^11.3.5",
+    "optis": "^0.1.0",
+    "yaml": "^2.9.0"
+  },
+  "peerDependencies": {
+    "rolldown": "^1.0.0"
   }
 }

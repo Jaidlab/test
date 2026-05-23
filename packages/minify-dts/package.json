@@ -1,5 +1,5 @@
 {
-  "name": "rolldown-plugin-license",
+  "name": "eslint-config-minify-dts",
   "version": "0.1.0",
   "type": "module",
   "funding": "https://github.com/sponsors/Jaid",
@@ -13,9 +13,7 @@
     "test": "bun test --max-concurrency 1 ./test"
   },
   "dependencies": {
-    "bundil": "workspace:*"
-  },
-  "peerDependencies": {
-    "rolldown": "^1.0.0"
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "eslint": "^10.4.0"
   }
 }

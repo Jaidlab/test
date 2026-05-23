@@ -20,7 +20,8 @@
     "#src/*": "./src/*"
   },
   "scripts": {
-    "test": "bun test --max-concurrency 1 ./test"
+    "build": "bun x rolldown --config",
+    "test": "bun test --max-concurrency 1 ./test ./packages/*/test"
   },
   "dependencies": {
     "bundil": "workspace:*",
@@ -28,7 +29,9 @@
     "rolldown-plugin-license": "workspace:*",
     "rolldown-plugin-minify": "workspace:*",
     "rolldown-plugin-minify-dts": "workspace:*",
-    "rolldown-plugin-publishimo": "workspace:*"
+    "rolldown-plugin-publishimo": "workspace:*",
+    "rolldown-plugin-readme": "workspace:*",
+    "eslint-config-minify-dts": "workspace:*"
   },
   "devDependencies": {
     "@rolldown/pluginutils": "^1.0.1",

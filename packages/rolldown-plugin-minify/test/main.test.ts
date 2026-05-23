@@ -1,9 +1,20 @@
 import {describe, expect, test} from 'bun:test'
 
-import rolldownPluginMinify from '../src/main.ts'
+import createMinifyJavaScriptPlugin, {minifyJavaScript} from '../src/main.ts'
 
-describe('undefined', () => {
-  test('placeholder test', () => {
-    expect(rolldownPluginMinify).toBeDefined()
+describe('minifyJavaScript', () => {
+  test('removes comments and unnecessary whitespace', async () => {
+    const originalCode = [
+      '// a comment',
+      'export const answer = () => {',
+      '  return 42',
+      '}',
+    ].join('\n')
+    const result = await minifyJavaScript(originalCode)
+    expect(result.originalSize).toBeGreaterThan(result.minifiedSize)
+    expect(result.code.trim()).toBe('export const answer=()=>42')
+  })
+  test('exports a plugin factory', () => {
+    expect(createMinifyJavaScriptPlugin()).toHaveProperty('name', 'minify-javascript')
   })
 })
