@@ -1,0 +1,108 @@
+name: Publish prepared tarball to an ephemeral registry
+on:
+  workflow_call:
+    inputs:
+      packageArtifactId:
+        type: string
+        description: same-run artifact containing the package.tgz from buildArtifact; skips installation, checks and packing
+      bunVersion:
+        type: string
+      lint:
+        type: boolean
+      scripts:
+        type: string
+        default: test
+        description: package scripts to run from the caller’s root before packing
+      packageDirectory:
+        type: string
+        default: .
+        description: package to publish, relative to the caller’s root
+    secrets:
+      npmToken:
+        description: optional npm token for packages without a trusted publisher
+        required: false
+jobs:
+  pack:
+    if: >-
+      ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref_type == 'tag' && startsWith(github.ref_name, 'v')) ||
+      (github.event_name == 'repository_dispatch' && github.event.action == 'bumped' && startsWith(github.event.client_payload.newTag, 'v'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      artifact: ${{ inputs.packageArtifactId || steps.upload.outputs.artifact-id }}
+    steps:
+      - if: inputs.packageArtifactId != ''
+        name: Select the prepared package
+        env:
+          ARTIFACT_ID: ${{ inputs.packageArtifactId }}
+        run: |
+          [[ $ARTIFACT_ID =~ ^[1-9][0-9]*$ ]] || { echo 'Expected one numeric package artifact ID.' >&2; exit 1; }
+      - id: pack
+        if: inputs.packageArtifactId == ''
+        uses: Jaid/workflows/actions/checkPackage@268ea11015c554c6ef907d92192f9cba81edda85
+        with:
+          ref: ${{ github.event_name == 'repository_dispatch' && format('refs/tags/{0}', github.event.client_payload.newTag) || '' }}
+          bunVersion: ${{ inputs.bunVersion }}
+          lint: ${{ inputs.lint }}
+          scripts: ${{ inputs.scripts }}
+          packageDirectory: ${{ inputs.packageDirectory }}
+          releaseTag: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.newTag || github.ref_name }}
+      - id: upload
+        if: inputs.packageArtifactId == ''
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: ${{ steps.pack.outputs.artifact }}
+          path: ${{ runner.temp }}/package.tgz
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+  publish:
+    needs: pack
+    runs-on: ubuntu-latest
+    services:
+      registry:
+        image: verdaccio/verdaccio:6@sha256:8c9cd40d28ef134140f4f6c4cef2032ac58bd554cce56757048f81b72717c09c
+        ports: ['127.0.0.1:4873:4873']
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          artifact-ids: ${{ needs.pack.outputs.artifact }}
+          path: ${{ runner.temp }}/publish
+          merge-multiple: true
+      - if: inputs.packageArtifactId != ''
+        name: Verify the prepared package matches the release tag
+        shell: bash
+        env:
+          TAG: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.newTag || github.ref_name }}
+        run: |
+          tar -xOzf "$RUNNER_TEMP/publish/package.tgz" package/package.json | jq -e --arg tag "$TAG" '
+            (.private | not) and (.name | type == "string" and length > 0) and
+            (.version | type == "string" and length > 0) and ("v" + .version == $tag)
+          ' >/dev/null || { echo "Prepared package is not publishable for $TAG." >&2; exit 1; }
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Provision a disposable npm registry user
+        run: |
+          curl --retry 15 --retry-connrefused -fsS http://127.0.0.1:4873/-/ping > /dev/null
+          token=$(curl -fsS -X PUT -H 'Content-Type: application/json' -d '{"name":"e2e","password":"disposable-ci-only","email":"e2e@example.invalid"}' 'http://127.0.0.1:4873/-/user/org.couchdb.user:e2e' | jq -er .token)
+          echo "::add-mask::$token"
+          printf '\n//127.0.0.1:4873/:_authToken=%s\n' "$token" >> "$NPM_CONFIG_USERCONFIG"
+          test "$(npm whoami --registry=http://127.0.0.1:4873/)" = e2e
+          tar -xOzf "$RUNNER_TEMP/publish/package.tgz" package/package.json | jq -e '.publishConfig.registry == "http://127.0.0.1:4873/"'
+      - run: npm publish "$RUNNER_TEMP/publish/package.tgz" --ignore-scripts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.npmToken }}
+      - name: Fetch published bytes from the registry
+        run: |
+          cd "$RUNNER_TEMP"
+          version=$(tar -xOzf publish/package.tgz package/package.json | jq -er '.name + "@" + .version')
+          filename=$(npm pack "$version" --registry=http://127.0.0.1:4873/ --cache "$RUNNER_TEMP/readback-cache" --ignore-scripts --json | jq -er '.[0].filename')
+          cmp publish/package.tgz "$filename"
+          printf 'Verified %s from the temporary npm registry: %s\n' "$version" "$(sha256sum "$filename" | cut -d' ' -f1)" >> "$GITHUB_STEP_SUMMARY"

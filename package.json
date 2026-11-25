@@ -1,0 +1,15 @@
+{
+  "name": "@jaidlab/build-artifact-fixture",
+  "version": "0.0.0-e2e.build-artifact.1",
+  "type": "module",
+  "files": ["site/out"],
+  "publishConfig": {"registry": "http://127.0.0.1:4873/", "tag": "e2e"},
+  "scripts": {
+    "build": "bun fixture.ts build",
+    "lint": "bun fixture.ts lint",
+    "test": "bun fixture.ts test",
+    "prepack": "bun -e \"throw Error('Unexpected pack hook')\"",
+    "prepublishOnly": "bun -e \"throw Error('Unexpected publish hook')\""
+  },
+  "devDependencies": {"picocolors": "1.1.1"}
+}

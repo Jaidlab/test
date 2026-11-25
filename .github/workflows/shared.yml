@@ -1,0 +1,70 @@
+name: One build for lint, test, capture and npm
+on:
+  push:
+    tags: ['v0.0.0-e2e.build-artifact.*']
+permissions:
+  contents: read
+jobs:
+  buildArtifact:
+    uses: Jaid/workflows/.github/workflows/buildArtifact.yml@268ea11015c554c6ef907d92192f9cba81edda85
+    with:
+      distDirectory: site/out
+      packageDirectory: .
+  lint:
+    needs: buildArtifact
+    uses: Jaid/workflows/.github/workflows/bunCi.yml@268ea11015c554c6ef907d92192f9cba81edda85
+    with:
+      artifactId: ${{ needs.buildArtifact.outputs.artifactId }}
+      distDirectory: ${{ needs.buildArtifact.outputs.distDirectory }}
+      ref: ${{ needs.buildArtifact.outputs.sourceSha }}
+      scripts: ''
+  test:
+    needs: buildArtifact
+    uses: Jaid/workflows/.github/workflows/bunCi.yml@268ea11015c554c6ef907d92192f9cba81edda85
+    with:
+      artifactId: ${{ needs.buildArtifact.outputs.artifactId }}
+      distDirectory: ${{ needs.buildArtifact.outputs.distDirectory }}
+      ref: ${{ needs.buildArtifact.outputs.sourceSha }}
+      lint: false
+      runner: windows-latest
+  screenshot:
+    needs: buildArtifact
+    uses: Jaid/workflows/.github/workflows/captureSpa.yml@268ea11015c554c6ef907d92192f9cba81edda85
+    with:
+      artifactId: ${{ needs.buildArtifact.outputs.artifactId }}
+      captureOptions: '{"width":720,"height":360,"wait":{"selector":"#ready"}}'
+  publish:
+    needs: [buildArtifact, lint, test]
+    uses: ./.github/workflows/localRegistry.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      packageArtifactId: ${{ needs.buildArtifact.outputs.packageArtifactId }}
+  verify:
+    needs: [buildArtifact, lint, test, screenshot, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          artifact-ids: ${{ needs.buildArtifact.outputs.artifactId }}
+          path: ${{ runner.temp }}/dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          artifact-ids: ${{ needs.buildArtifact.outputs.packageArtifactId }}
+          path: ${{ runner.temp }}/pkg
+          merge-multiple: true
+      - name: Verify source SHA, build directory and byte identity
+        env:
+          SHA: ${{ needs.buildArtifact.outputs.sourceSha }}
+          DIRECTORY: ${{ needs.buildArtifact.outputs.distDirectory }}
+        run: |
+          cd "$RUNNER_TEMP"
+          [[ $SHA == "$GITHUB_SHA" && $DIRECTORY == site/out ]]
+          test ! -e dist/stale.txt
+          jq -e --arg sha "$SHA" --arg run "$GITHUB_RUN_ID" '.sha == $sha and .run == $run' dist/.well-known/build.json
+          for file in index.html marker.js .well-known/build.json; do
+            tar -xOzf pkg/package.tgz "package/site/out/$file" | cmp - "dist/$file"
+          done
+          sha256sum dist/marker.js pkg/package.tgz
