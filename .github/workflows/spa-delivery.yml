@@ -1,0 +1,129 @@
+name: Verify SPA screenshot delivery
+on:
+  push:
+    branches: [e2e/spa-delivery]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+      receiver: ${{ steps.receiver.outputs.id }}
+    steps:
+      - name: Make a public test fixture
+        run: |
+          mkdir dist
+          cat >dist/index.html <<'HTML'
+          <!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
+          <style>html {background:#102238;color:#eff6ff;font:24px system-ui}main {margin:8vw}small {color:#80ffd8}</style>
+          <main><small>Jaidlab/test</small><h1>Screenshot delivery</h1><p></p></main>
+          <script>document.querySelector('p').textContent = location.pathname; document.body.id = 'ready'</script>
+          HTML
+      - id: upload
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: build
+          path: dist/
+          if-no-files-found: error
+      - id: receiver
+        name: Create a disposable webhook receiver for the fixture
+        run: |
+          id=$(curl -fsS --max-time 30 --json '{"default_status":201,"expiry":1800,"request_limit":5}' https://webhook.site/token | jq -er '.uuid')
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+  desktop:
+    needs: build
+    uses: Jaid/workflows/.github/workflows/captureSpa.yml@e29e1666c18fb59956631f1631b88873a9b77511
+    permissions:
+      contents: write
+    with:
+      artifactId: ${{ needs.build.outputs.artifact }}
+      storageBranch: previews/spa-delivery
+      route: /desktop
+      imageName: delivery-desktop
+      captureOptions: '{"width":960,"height":540,"wait":{"selector":"#ready"}}'
+    secrets:
+      webhook: ${{ format('https://webhook.site/{0}/desktop', needs.build.outputs.receiver) }}
+  mobile:
+    needs: build
+    uses: Jaid/workflows/.github/workflows/captureSpa.yml@e29e1666c18fb59956631f1631b88873a9b77511
+    with:
+      webhook: ${{ format('https://webhook.site/{0}/mobile', needs.build.outputs.receiver) }}
+      route: /mobile
+      imageName: delivery-mobile
+      captureOptions: '{"width":390,"height":844,"format":"webp","wait":{"selector":"#ready"}}'
+  artifactOnly:
+    needs: build
+    uses: Jaid/workflows/.github/workflows/captureSpa.yml@e29e1666c18fb59956631f1631b88873a9b77511
+    with:
+      imageName: artifact-only
+      captureOptions: '{"width":320,"height":240,"wait":{"selector":"#ready"}}'
+  verify:
+    needs: [build, desktop, mobile, artifactOnly]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          artifact-ids: ${{ needs.desktop.outputs.artifactId }},${{ needs.mobile.outputs.artifactId }},${{ needs.artifactOnly.outputs.artifactId }}
+          merge-multiple: true
+          skip-decompress: true
+          path: ${{ runner.temp }}/screenshots
+      - name: Compare the named branch and both webhook uploads with the original artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECEIVER: ${{ needs.build.outputs.receiver }}
+          DESKTOP: ${{ needs.desktop.outputs.imageFile }}
+          MOBILE: ${{ needs.mobile.outputs.imageFile }}
+          ARTIFACT_ONLY: ${{ needs.artifactOnly.outputs.imageFile }}
+          PREVIEW: ${{ needs.desktop.outputs.previewUrl }}
+          MOBILE_PREVIEW: ${{ needs.mobile.outputs.previewUrl }}
+          ARTIFACT_ONLY_PREVIEW: ${{ needs.artifactOnly.outputs.previewUrl }}
+        run: |
+          cd "$RUNNER_TEMP/screenshots"
+          test -s "$ARTIFACT_ONLY"
+          test -z "$ARTIFACT_ONLY_PREVIEW"
+          test -z "$MOBILE_PREVIEW"
+          commit=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/previews/spa-delivery" --jq .object.sha)
+          [[ $PREVIEW == "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$commit/runs/$GITHUB_RUN_ID/$DESKTOP" ]]
+          curl --retry 6 --retry-all-errors -fsSL "$PREVIEW" -o "$RUNNER_TEMP/stored.png"
+          cmp "$DESKTOP" "$RUNNER_TEMP/stored.png"
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict'
+          import {createHash} from 'node:crypto'
+          import {readFile} from 'node:fs/promises'
+          import {setTimeout as sleep} from 'node:timers/promises'
+          const api = `https://webhook.site/token/${process.env.RECEIVER}`
+          const get = async (url, accept = '*/*') => {
+            const r = await fetch(url, {headers: {Accept: accept}, signal: AbortSignal.timeout(20000)})
+            assert.equal(r.status, 200)
+            return r
+          }
+          let posts = []
+          for (let i = 0; i < 12; i++) {
+            posts = (await (await get(`${api}/requests?t=${Date.now()}`, 'application/json')).json()).data
+            if (posts.length >= 2) break
+            await sleep(1500)
+          }
+          assert.equal(posts.length, 2)
+          for (const [route, filename, type] of [['desktop', process.env.DESKTOP, 'image/png'], ['mobile', process.env.MOBILE, 'image/webp']]) {
+            const post = posts.find(p => new URL(p.url).pathname.endsWith('/' + route))
+            assert.equal(post?.method, 'POST')
+            assert.deepEqual(Object.keys(post.files), ['file'])
+            const file = post.files.file
+            assert.equal(file.filename, filename)
+            assert.equal(file.content_type, type)
+            const received = Buffer.from(await (await get(`${api}/request/${post.uuid}/download/${file.id}`)).arrayBuffer())
+            assert.deepEqual(received, await readFile(filename))
+            console.log(`${filename}: ${received.length} bytes, SHA-256 ${createHash('sha256').update(received).digest('hex')}`)
+          }
+          JS
+          printf 'Verified both webhook files byte for byte.\n\n![Desktop storage branch preview](%s)\n' "$PREVIEW" >> "$GITHUB_STEP_SUMMARY"
+  cleanup:
+    needs: [build, verify]
+    if: always() && needs.build.outputs.receiver != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete the test receiver and its files
+        env:
+          RECEIVER: ${{ needs.build.outputs.receiver }}
+        run: curl -fsS --max-time 30 -X DELETE "https://webhook.site/token/$RECEIVER"
