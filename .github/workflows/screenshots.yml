@@ -1,0 +1,80 @@
+name: Capture the Aubit Viewer SPA
+on:
+  push:
+    branches: [e2e/capture-spa]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          repository: Jaid/aubit.me
+          ref: 82b7d507be9e22bdf5798a2be3099ef795deea17
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile && bun run build
+      - id: upload
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: aubit-production
+          path: dist/
+          if-no-files-found: error
+  desktop:
+    needs: build
+    uses: Jaid/workflows/.github/workflows/captureSpa.yml@49655f344696592c9d3554fda10e79e4eef54b90
+    permissions:
+      contents: write
+    with:
+      artifactId: ${{ needs.build.outputs.artifact }}
+      imageName: aubit-desktop
+      captureOptions: '{"width":1440,"height":900,"colorScheme":"dark","wait":{"count":"all","rules":["networkidle2",{"selector":"#input .monaco-editor [role=textbox]"}]}}'
+      publishPreview: true
+  mobile:
+    needs: build
+    uses: Jaid/workflows/.github/workflows/captureSpa.yml@49655f344696592c9d3554fda10e79e4eef54b90
+    permissions:
+      contents: read
+    with:
+      buildArtifact: aubit-production
+      basePath: /demo/
+      route: /viewer?mode=mobile#report
+      imageName: aubit-mobile
+      captureOptions: '{"width":390,"height":844,"format":"webp","quality":90,"wait":{"selector":"[data-input-status]"}}'
+  verify:
+    needs: [desktop, mobile]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          artifact-ids: ${{ needs.desktop.outputs.artifactId }},${{ needs.mobile.outputs.artifactId }}
+          path: ${{ runner.temp }}/verify
+          merge-multiple: true
+          skip-decompress: true
+      - name: Validate both images and compare the public preview with the captured artifact
+        env:
+          DESKTOP: ${{ needs.desktop.outputs.imageFile }}
+          MOBILE: ${{ needs.mobile.outputs.imageFile }}
+          PREVIEW: ${{ needs.desktop.outputs.previewUrl }}
+          MOBILE_PREVIEW: ${{ needs.mobile.outputs.previewUrl }}
+        run: |
+          cd "$RUNNER_TEMP/verify"
+          [[ -z $MOBILE_PREVIEW && $PREVIEW == https://raw.githubusercontent.com/* ]]
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict'
+          import {readFileSync} from 'node:fs'
+          const png = readFileSync(process.env.DESKTOP), webp = readFileSync(process.env.MOBILE)
+          assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a')
+          assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [1440, 900])
+          assert.equal(webp.toString('ascii', 0, 4), 'RIFF')
+          assert.equal(webp.toString('ascii', 8, 12), 'WEBP')
+          assert.ok(png.length > 10000 && webp.length > 3000)
+          JS
+          curl --retry 6 --retry-all-errors -fsSL "$PREVIEW" -o "$RUNNER_TEMP/public.png"
+          cmp "$DESKTOP" "$RUNNER_TEMP/public.png"
+          printf 'Verified both screenshots and the public preview.\n\n![Aubit Viewer desktop](%s)\n' "$PREVIEW" >> "$GITHUB_STEP_SUMMARY"
